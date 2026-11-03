@@ -6,21 +6,24 @@
   <meta name="description" content="Tân Quang CRM Sandbox V0.1 — dữ liệu synthetic, chỉ dùng kiểm thử kỹ thuật.">
   <title>Tân Quang CRM Sandbox V0.1</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="auth-overrides.css">
 </head>
 <body class="locked">
   <section class="access-gate" id="access-gate" aria-labelledby="access-title">
     <div class="access-card">
       <div class="access-brand"><span class="brand-mark">TQ</span><span>CRM Sandbox</span></div>
-      <p class="eyebrow">Quyền truy cập demo</p>
-      <h1 id="access-title">Nhập mã truy cập</h1>
-      <p class="access-copy">Bản thử nghiệm dùng dữ liệu synthetic. Mã chỉ tạo một lớp kiểm soát giao diện, không thay thế xác thực bảo mật.</p>
+      <p class="eyebrow">Supabase Admin Authentication</p>
+      <h1 id="access-title">Đăng nhập quản trị</h1>
+      <p class="access-copy">Nội dung CRM, Customer 360 và dữ liệu synthetic chỉ được tải sau khi Supabase xác thực tài khoản có vai trò quản trị viên.</p>
       <form id="access-form">
-        <label for="access-code">Mã gồm 6 chữ số</label>
-        <input id="access-code" name="code" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" placeholder="••••••" required autofocus>
-        <button type="submit">Mở CRM Sandbox</button>
+        <label for="access-email">Email quản trị</label>
+        <input id="access-email" name="email" type="email" autocomplete="username" placeholder="admin@..." required autofocus>
+        <label for="access-code">Mật khẩu</label>
+        <input id="access-code" name="password" type="password" autocomplete="current-password" placeholder="••••••••••••" required>
+        <button type="submit">Đăng nhập CRM Sandbox</button>
         <p class="access-error" id="access-error" role="alert" aria-live="polite"></p>
       </form>
-      <div class="access-safety"><strong>Production Gate: BLOCKED</strong><span>Không có dữ liệu khách hàng thật trong bản demo này.</span></div>
+      <div class="access-safety"><strong>Nội dung công khai</strong><span>Đây là bản sandbox dùng dữ liệu tổng hợp. Production Gate vẫn BLOCKED và không có dữ liệu khách hàng thật.</span></div>
     </div>
   </section>
   <div class="app-shell">
@@ -39,7 +42,7 @@
     <main>
       <header class="topbar">
         <div><p class="eyebrow">Customer intelligence workspace</p><h1 id="page-title">Tổng quan CRM</h1></div>
-        <div class="gate-pill"><span class="dot"></span>Production BLOCKED</div>
+        <div class="topbar-actions"><button id="logout-button" class="logout-button" type="button">Đăng xuất</button><div class="gate-pill"><span class="dot"></span>Production BLOCKED</div></div>
       </header>
       <div class="warning" role="alert"><strong>DỮ LIỆU MÔ PHỎNG</strong><span>Không dùng để ra quyết định kinh doanh. environment=SANDBOX · data_origin=SYNTHETIC · business_approved=FALSE</span></div>
 
@@ -77,6 +80,7 @@
   </div>
 
   <dialog id="customer-dialog"><button class="close" aria-label="Đóng">×</button><div id="customer-detail"></div></dialog>
+  <script src="supabase-config.js"></script>
   <script src="app.js" defer></script>
 </body>
 </html>

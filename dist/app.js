@@ -1,14 +1,13 @@
 const RELEASE = "v0.1-31ed10f5fde0";
-const ACCESS_HASH = "1f0384bad409c942f9addddf081f661e6615a7ab8db2b57de34393676eeeeb1a";
-const ACCESS_SESSION_KEY = "tq-crm-sandbox-access";
-let accessFailures = 0;
+const API_BASE = "https://fxwgehtnytdqqwabgemw.supabase.co/functions/v1/crm-sandbox";
+const AUTH_SESSION_KEY = "tq-crm-admin-session";
 let dataLoaded = false;
 
 const DATA = {
-  customer360: "data/customer_360.csv",
-  scoring: "data/scoring_sandbox.csv",
-  opportunities: "data/opportunities.csv",
-  activities: "data/crm_activities.csv",
+  customer360: `${API_BASE}/data/customer_360.csv`,
+  scoring: `${API_BASE}/data/scoring_sandbox.csv`,
+  opportunities: `${API_BASE}/data/opportunities.csv`,
+  activities: `${API_BASE}/data/crm_activities.csv`,
 };
 
 const state = {
@@ -75,11 +74,64 @@ const escapeHTML = (value) => String(value ?? "").replace(/[&<>'"]/g, (character
   '"': "&quot;",
 }[character]));
 
+function readSession() {
+  try {
+    return JSON.parse(sessionStorage.getItem(AUTH_SESSION_KEY) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(session) {
+  sessionStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+    access_token: session.access_token,
+    refresh_token: session.refresh_token,
+    expires_at: Math.floor(Date.now() / 1000) + Number(session.expires_in || 3600),
+    email: session.user?.email || "",
+  }));
+}
+
+function clearSession() {
+  sessionStorage.removeItem(AUTH_SESSION_KEY);
+}
+
+async function refreshSession(session) {
+  if (!session?.refresh_token) return null;
+  const response = await fetch(`${window.TQ_SUPABASE.url}/auth/v1/token?grant_type=refresh_token`, {
+    method: "POST",
+    headers: { apikey: window.TQ_SUPABASE.publishableKey, "content-type": "application/json" },
+    body: JSON.stringify({ refresh_token: session.refresh_token }),
+  });
+  if (!response.ok) return null;
+  const refreshed = await response.json();
+  saveSession(refreshed);
+  return readSession();
+}
+
+async function activeSession() {
+  const session = readSession();
+  if (!session) return null;
+  if (Number(session.expires_at || 0) > Math.floor(Date.now() / 1000) + 30) return session;
+  return refreshSession(session);
+}
+
 async function load() {
+  let session = await activeSession();
+  if (!session) throw new Error("Phiên đăng nhập đã hết hạn.");
   const entries = [];
   for (const [key, url] of Object.entries(DATA)) {
-    const response = await fetch(url);
+    let response = await fetch(url, {
+      headers: {
+        apikey: window.TQ_SUPABASE.publishableKey,
+        authorization: `Bearer ${session.access_token}`,
+      },
+    });
+    if (response.status === 401) {
+      session = await refreshSession(session);
+      if (session) response = await fetch(url, { headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}` } });
+    }
     if (!response.ok) {
+      if (response.status === 401 || response.status === 403) clearSession();
       throw new Error(`Không tải được ${url}`);
     }
     entries.push([key, parseCSV(await response.text())]);
@@ -91,22 +143,13 @@ async function load() {
   renderAll();
 }
 
-async function hashAccessCode(value) {
-  const bytes = new TextEncoder().encode(value);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function unlockApplication() {
+async function unlockApplication() {
+  if (!dataLoaded) {
+    await load();
+    dataLoaded = true;
+  }
   document.body.classList.remove("locked");
   document.body.classList.add("unlocked");
-  sessionStorage.setItem(ACCESS_SESSION_KEY, "granted");
-  if (!dataLoaded) {
-    dataLoaded = true;
-    load().catch((error) => {
-      document.querySelector("#overview").innerHTML = `<div class="panel"><h2>Không tải được dữ liệu sandbox</h2><p>${escapeHTML(error.message)}</p></div>`;
-    });
-  }
 }
 
 async function handleAccess(event) {
@@ -114,35 +157,44 @@ async function handleAccess(event) {
   const input = document.querySelector("#access-code");
   const error = document.querySelector("#access-error");
   const button = event.currentTarget.querySelector("button");
-  const value = input.value.trim();
-  if (!/^\d{6}$/.test(value)) {
-    error.textContent = "Vui lòng nhập đúng 6 chữ số.";
+  const email = document.querySelector("#access-email").value.trim();
+  const password = input.value;
+  if (!email || !password) {
+    error.textContent = "Vui lòng nhập email và mật khẩu.";
     return;
   }
   button.disabled = true;
-  const accepted = await hashAccessCode(value) === ACCESS_HASH;
-  if (accepted) {
+  error.textContent = "";
+  try {
+    const response = await fetch(`${window.TQ_SUPABASE.url}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { apikey: window.TQ_SUPABASE.publishableKey, "content-type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const session = await response.json();
+    if (!response.ok || !session.access_token) throw new Error("Email hoặc mật khẩu không đúng.");
+    saveSession(session);
+    await unlockApplication();
     input.value = "";
-    unlockApplication();
-    return;
-  }
-  accessFailures += 1;
-  input.value = "";
-  error.textContent = "Mã truy cập không đúng.";
-  input.focus();
-  if (accessFailures >= 5) {
-    error.textContent = "Đã nhập sai nhiều lần. Vui lòng thử lại sau 30 giây.";
-    input.disabled = true;
-    setTimeout(() => {
-      accessFailures = 0;
-      input.disabled = false;
-      button.disabled = false;
-      error.textContent = "";
-      input.focus();
-    }, 30000);
-  } else {
+  } catch (loginError) {
+    clearSession();
+    error.textContent = loginError.message || "Không thể đăng nhập.";
+    input.select();
+  } finally {
     button.disabled = false;
   }
+}
+
+async function handleLogout() {
+  const session = readSession();
+  clearSession();
+  if (session?.access_token) {
+    fetch(`${window.TQ_SUPABASE.url}/auth/v1/logout`, {
+      method: "POST",
+      headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}` },
+    }).catch(() => {});
+  }
+  window.location.reload();
 }
 
 function renderAll() {
@@ -291,6 +343,7 @@ document.addEventListener("click", (event) => {
   const customer = event.target.closest("[data-customer]");
   if (customer) showCustomer(customer.dataset.customer);
   if (event.target.closest(".close")) document.querySelector("#customer-dialog").close();
+  if (event.target.closest("#logout-button")) handleLogout();
 });
 
 document.querySelector("#customer-search").addEventListener("input", renderCustomers);
@@ -300,4 +353,9 @@ document.querySelector("#customer-dialog").addEventListener("click", (event) => 
 });
 
 document.querySelector("#access-form").addEventListener("submit", handleAccess);
-if (sessionStorage.getItem(ACCESS_SESSION_KEY) === "granted") unlockApplication();
+if (readSession()) {
+  unlockApplication().catch(() => {
+    clearSession();
+    document.querySelector("#access-error").textContent = "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
+  });
+}

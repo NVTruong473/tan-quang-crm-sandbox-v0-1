@@ -1,0 +1,32 @@
+.access-card input {
+  font: 600 15px/1.2 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  letter-spacing: normal;
+  text-align: left;
+}
+
+.access-card #access-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .08em;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logout-button {
+  border: 1px solid #cbd7e5;
+  border-radius: 9px;
+  background: #fff;
+  color: #27435f;
+  padding: 9px 12px;
+  font: 700 12px/1 inherit;
+  cursor: pointer;
+}
+
+.logout-button:hover { background: #edf4fb; }
+
+@media (max-width: 760px) {
+  .topbar-actions { align-items: flex-end; flex-direction: column-reverse; }
+}

@@ -1,100 +1,45 @@
-# vinext-starter
+# Tân Quang CRM Sandbox V0.1
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+Sandbox CRM dùng dữ liệu tổng hợp để kiểm thử giao diện và luồng Customer 360. Không dùng số liệu trong bản này để ra quyết định kinh doanh.
 
-## Prerequisites
+## Truy cập
 
-- Node.js `>=22.13.0`
+- Frontend: GitHub Pages.
+- Đăng nhập: Supabase Auth bằng email và mật khẩu.
+- Phân quyền: Edge Function chỉ trả dữ liệu khi tài khoản đã được xác thực và có `app_metadata.role = admin`, `app_metadata.environment = sandbox`.
+- Phiên đăng nhập được giữ trong `sessionStorage`, không lưu mật khẩu trong trình duyệt.
+- Production Gate vẫn `BLOCKED`.
 
-## Quick Start
+Trang công khai chỉ chứa thông tin giới thiệu sandbox và form đăng nhập. Bốn tệp CSV không còn nằm trong GitHub Pages; chúng được đóng gói trong Supabase Edge Function và chỉ trả về sau kiểm tra quyền quản trị.
+
+## Kiến trúc
+
+```text
+GitHub Pages (public shell)
+        |
+        +-- Supabase Auth: email/password -> user access token
+        |
+        +-- Edge Function /crm-sandbox/data/*
+                |-- xác minh token qua Auth server
+                |-- kiểm tra app_metadata role/environment
+                +-- trả dữ liệu SYNTHETIC hoặc 401
+```
+
+`dist/supabase-config.js` chỉ chứa publishable key, loại khóa được Supabase thiết kế để dùng trong trình duyệt. Secret key và service-role key tuyệt đối không được đưa vào source control.
+
+## Triển khai Edge Function
 
 ```bash
-npm install
-npm run dev
-npm run build
+npx supabase@2.72.7 functions deploy crm-sandbox \
+  --project-ref fxwgehtnytdqqwabgemw \
+  --no-verify-jwt
 ```
 
-This starter does not use `wrangler.jsonc`.
+`--no-verify-jwt` là có chủ đích: function tự xác minh access token với Supabase Auth và kiểm tra vai trò admin, đồng thời cho phép endpoint `/health` công khai. Không được thêm route dữ liệu nào mà bỏ qua `authenticatedAdmin()`.
 
-## Included Shape
+## Ranh giới bảo mật
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+- Đây là sandbox read-only, không có thao tác tạo/sửa/xóa dữ liệu CRM.
+- Dữ liệu đều mang nhãn `SANDBOX`, `SYNTHETIC`, `business_approved=FALSE`.
+- Không có dữ liệu tài chính thật hoặc scoring production.
+- Tài khoản admin phải được thu hồi hoặc đổi mật khẩu sau demo/handover.

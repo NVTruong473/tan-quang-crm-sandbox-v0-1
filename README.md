@@ -1,5 +1,9 @@
 # Tân Quang CRM Sandbox V0.1
 
+## Data Intake & Release V1
+
+Sandbox có lớp kiểm tra XLSX/CSV tại trình duyệt: file được fingerprint, kiểm tra Data Contract và chỉ có thể nạp bản xem trước khi đủ cấu trúc. Không có tự đồng bộ file cục bộ, không tải input lên cloud ở bước preflight và không làm thay đổi release đang phát hành. Quy tắc đầy đủ: [CRM_PRODUCT_RULES_V1.md](docs/CRM_PRODUCT_RULES_V1.md).
+
 Sandbox CRM dùng dữ liệu tổng hợp để kiểm thử giao diện và luồng Customer 360. Không dùng số liệu trong bản này để ra quyết định kinh doanh.
 
 ## Truy cập

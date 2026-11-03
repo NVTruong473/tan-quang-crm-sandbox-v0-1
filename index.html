@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Tân Quang CRM Sandbox V0.1 — dữ liệu synthetic, chỉ dùng kiểm thử kỹ thuật.">
+  <title>Tân Quang CRM Sandbox V0.1</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">TQ</span><div><strong>Tân Quang</strong><small>CRM Sandbox V0.1</small></div></div>
+      <nav aria-label="Điều hướng chính">
+        <button class="nav-item active" data-view="overview">Tổng quan</button>
+        <button class="nav-item" data-view="customers">Khách hàng</button>
+        <button class="nav-item" data-view="opportunities">Cơ hội</button>
+        <button class="nav-item" data-view="activities">Hoạt động</button>
+        <button class="nav-item" data-view="safety">Safety Gate</button>
+      </nav>
+      <div class="release-card"><span>Active release</span><strong>v0.1-31ed10f5fde0</strong><small>READY_FOR_SANDBOX_ONLY</small></div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">Customer intelligence workspace</p><h1 id="page-title">Tổng quan CRM</h1></div>
+        <div class="gate-pill"><span class="dot"></span>Production BLOCKED</div>
+      </header>
+      <div class="warning" role="alert"><strong>DỮ LIỆU MÔ PHỎNG</strong><span>Không dùng để ra quyết định kinh doanh. environment=SANDBOX · data_origin=SYNTHETIC · business_approved=FALSE</span></div>
+
+      <section id="overview" class="view active">
+        <div class="kpi-grid" id="kpi-grid"></div>
+        <div class="content-grid">
+          <article class="panel span-2"><div class="panel-head"><div><p class="eyebrow">Customer 360</p><h2>Khách hàng theo doanh thu mô phỏng</h2></div><button class="text-button" data-go="customers">Xem tất cả</button></div><div id="revenue-bars" class="bars"></div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">Scoring</p><h2>Phân nhóm mô phỏng</h2></div></div><div id="segment-ring" class="ring-wrap"></div></article>
+          <article class="panel span-2"><div class="panel-head"><div><p class="eyebrow">Accounts</p><h2>Cần chú ý trong sandbox</h2></div></div><div id="attention-list" class="account-list"></div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">Pipeline</p><h2>Cơ hội đang mở</h2></div></div><div id="pipeline-summary" class="pipeline-summary"></div></article>
+        </div>
+      </section>
+
+      <section id="customers" class="view">
+        <div class="toolbar"><label class="search"><span>Tìm kiếm</span><input id="customer-search" type="search" placeholder="Tên hoặc mã khách hàng"></label><label><span>Phân nhóm</span><select id="segment-filter"><option value="ALL">Tất cả</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label></div>
+        <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Khách hàng</th><th>Doanh thu</th><th>Lợi nhuận</th><th>Công nợ</th><th>Pipeline</th><th>Điểm</th><th>Nhóm</th></tr></thead><tbody id="customer-table"></tbody></table></div></div>
+      </section>
+
+      <section id="opportunities" class="view">
+        <div class="panel"><div class="panel-head"><div><p class="eyebrow">Sales pipeline</p><h2>Cơ hội theo giai đoạn</h2></div><span class="muted">Giá trị và xác suất đều là synthetic</span></div><div id="opportunity-board" class="opportunity-board"></div></div>
+      </section>
+
+      <section id="activities" class="view">
+        <div class="panel"><div class="panel-head"><div><p class="eyebrow">Engagement</p><h2>Hoạt động CRM gần nhất</h2></div></div><div id="activity-feed" class="activity-feed"></div></div>
+      </section>
+
+      <section id="safety" class="view">
+        <div class="safety-grid">
+          <article class="panel"><p class="eyebrow">Production</p><h2>Gate vẫn khóa</h2><div class="status-block blocked">BLOCKED</div><p>11 quyết định nghiệp vụ chưa được phê duyệt. Không có nút hoặc luồng nào từ giao diện này ghi dữ liệu sang production.</p></article>
+          <article class="panel"><p class="eyebrow">Sandbox</p><h2>Phạm vi cho phép</h2><div class="status-block ready">READY_FOR_SANDBOX_ONLY</div><p>Dùng để kiểm thử UI, luồng dữ liệu, Customer 360, dashboard và scoring mô phỏng.</p></article>
+          <article class="panel span-2"><p class="eyebrow">Controls</p><h2>Ranh giới bắt buộc</h2><div class="control-grid"><div><strong>SYNTHETIC IDs</strong><span>Mọi customer_id bắt đầu bằng SYN-</span></div><div><strong>READ ONLY</strong><span>Không có thao tác tạo, sửa hoặc xóa</span></div><div><strong>SIMULATED SCORE</strong><span>Công thức chưa được phê duyệt nghiệp vụ</span></div><div><strong>ISOLATED RELEASE</strong><span>Nguồn duy nhất: v0.1-31ed10f5fde0</span></div></div></article>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="customer-dialog"><button class="close" aria-label="Đóng">×</button><div id="customer-detail"></div></dialog>
+  <script src="app.js" defer></script>
+</body>
+</html>

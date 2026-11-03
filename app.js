@@ -1,4 +1,4 @@
-const RELEASE = "v0.1-31ed10f5fde0";
+let RELEASE = "v0.1-31ed10f5fde0";
 const API_BASE = "https://fxwgehtnytdqqwabgemw.supabase.co/functions/v1/crm-sandbox";
 const AUTH_SESSION_KEY = "tq-crm-admin-session";
 let dataLoaded = false;
@@ -17,7 +17,62 @@ const state = {
   activities: [],
   customerMap: new Map(),
   scoreMap: new Map(),
+  importCandidate: null,
 };
+
+const IMPORT_CONTRACT = {
+  customer360: {
+    label: "customer_360",
+    sourceNames: ["customer_360", "customer360", "khach_hang", "khachhang", "customers"],
+    required: ["customer_id", "customer_name", "revenue", "gross_profit", "outstanding", "weighted_pipeline"],
+  },
+  scoring: {
+    label: "scoring_sandbox",
+    sourceNames: ["scoring_sandbox", "scoring", "scores", "diem_khach_hang"],
+    required: ["customer_id", "total_score", "segment"],
+  },
+  opportunities: {
+    label: "opportunities",
+    sourceNames: ["opportunities", "opportunity", "co_hoi", "pipeline"],
+    required: ["customer_id", "opportunity_name", "estimated_value", "probability_pct", "stage", "status"],
+  },
+  activities: {
+    label: "crm_activities",
+    sourceNames: ["crm_activities", "activities", "activity", "hoat_dong"],
+    required: ["customer_id", "activity_date", "activity_type", "summary", "outcome", "owner"],
+  },
+};
+
+const HEADER_ALIASES = {
+  customer_id: ["customer_id", "customer id", "ma_khach_hang", "mã khách hàng", "ma khach hang"],
+  customer_name: ["customer_name", "customer name", "ten_khach_hang", "tên khách hàng", "ten khach hang"],
+  revenue: ["revenue", "doanh_thu", "doanh thu"],
+  gross_profit: ["gross_profit", "gross profit", "loi_nhuan_gop", "lợi nhuận gộp"],
+  outstanding: ["outstanding", "cong_no", "công nợ"],
+  weighted_pipeline: ["weighted_pipeline", "weighted pipeline", "pipeline_co_trong_so", "pipeline có trọng số"],
+  total_score: ["total_score", "total score", "tong_diem", "tổng điểm"],
+  segment: ["segment", "phan_khuc", "phân khúc", "nhom", "nhóm"],
+  opportunity_name: ["opportunity_name", "opportunity name", "ten_co_hoi", "tên cơ hội"],
+  estimated_value: ["estimated_value", "estimated value", "gia_tri_uoc_tinh", "giá trị ước tính"],
+  probability_pct: ["probability_pct", "probability", "xac_suat", "xác suất"],
+  stage: ["stage", "giai_doan", "giai đoạn"],
+  status: ["status", "trang_thai", "trạng thái"],
+  activity_date: ["activity_date", "activity date", "ngay_hoat_dong", "ngày hoạt động"],
+  activity_type: ["activity_type", "activity type", "loai_hoat_dong", "loại hoạt động"],
+  summary: ["summary", "tom_tat", "tóm tắt"],
+  outcome: ["outcome", "ket_qua", "kết quả"],
+  owner: ["owner", "nguoi_phu_trach", "người phụ trách"],
+};
+
+const normalize = (value) => String(value ?? "").trim().toLocaleLowerCase("vi-VN").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+
+function canonicalHeader(value) {
+  const source = normalize(value);
+  for (const [canonical, aliases] of Object.entries(HEADER_ALIASES)) {
+    if (aliases.map(normalize).includes(source)) return canonical;
+  }
+  return source;
+}
 
 function parseCSV(text) {
   const rows = [];
@@ -61,6 +116,129 @@ function parseCSV(text) {
   return rows
     .filter((values) => values.some(Boolean))
     .map((values) => Object.fromEntries(headers.map((header, index) => [header, values[index] ?? ""])));
+}
+
+function rowsToObjects(rows) {
+  const headers = (rows.shift() || []).map(canonicalHeader);
+  return rows
+    .filter((values) => values.some((value) => String(value ?? "").trim()))
+    .map((values) => Object.fromEntries(headers.map((header, index) => [header, String(values[index] ?? "").trim()])));
+}
+
+function readUint32(view, offset) { return view.getUint32(offset, true); }
+function readUint16(view, offset) { return view.getUint16(offset, true); }
+
+async function unzipXlsxEntries(buffer) {
+  if (!("DecompressionStream" in window)) throw new Error("Trình duyệt này chưa hỗ trợ đọc XLSX an toàn. Hãy dùng Chrome/Edge mới hoặc xuất CSV.");
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  let end = -1;
+  for (let index = bytes.length - 22; index >= Math.max(0, bytes.length - 65557); index -= 1) {
+    if (readUint32(view, index) === 0x06054b50) { end = index; break; }
+  }
+  if (end < 0) throw new Error("File XLSX không có cấu trúc ZIP hợp lệ.");
+  const entryCount = readUint16(view, end + 10);
+  if (entryCount > 400) throw new Error("Workbook có quá nhiều thành phần để kiểm tra an toàn.");
+  let pointer = readUint32(view, end + 16);
+  const decoder = new TextDecoder();
+  const entries = new Map();
+  let expandedSize = 0;
+  for (let index = 0; index < entryCount; index += 1) {
+    if (readUint32(view, pointer) !== 0x02014b50) throw new Error("Không thể đọc mục lục XLSX.");
+    if (readUint16(view, pointer + 8) & 0x0001) throw new Error("Workbook được mã hóa không thể kiểm tra trong trình duyệt.");
+    const compression = readUint16(view, pointer + 10);
+    const compressedSize = readUint32(view, pointer + 20);
+    const uncompressedSize = readUint32(view, pointer + 24);
+    expandedSize += uncompressedSize;
+    if (expandedSize > 80 * 1024 * 1024) throw new Error("Workbook có kích thước giải nén vượt giới hạn kiểm tra an toàn.");
+    const fileNameLength = readUint16(view, pointer + 28);
+    const extraLength = readUint16(view, pointer + 30);
+    const commentLength = readUint16(view, pointer + 32);
+    const localOffset = readUint32(view, pointer + 42);
+    const path = decoder.decode(bytes.slice(pointer + 46, pointer + 46 + fileNameLength));
+    if (readUint32(view, localOffset) !== 0x04034b50) throw new Error("Không thể đọc một tệp bên trong XLSX.");
+    const localNameLength = readUint16(view, localOffset + 26);
+    const localExtraLength = readUint16(view, localOffset + 28);
+    const payloadStart = localOffset + 30 + localNameLength + localExtraLength;
+    const payload = bytes.slice(payloadStart, payloadStart + compressedSize);
+    let content;
+    if (compression === 0) content = payload;
+    else if (compression === 8) content = new Uint8Array(await new Response(new Blob([payload]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer());
+    else throw new Error("Workbook dùng kiểu nén không được hỗ trợ.");
+    entries.set(path, decoder.decode(content));
+    pointer += 46 + fileNameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function excelColumn(reference) {
+  const letters = String(reference || "A").match(/[A-Z]+/i)?.[0]?.toUpperCase() || "A";
+  return [...letters].reduce((total, letter) => total * 26 + letter.charCodeAt(0) - 64, 0) - 1;
+}
+
+function xlsxText(node) { return [...node.querySelectorAll("t")].map((part) => part.textContent || "").join(""); }
+
+function parseXlsxSheet(xml, sharedStrings) {
+  const documentXml = new DOMParser().parseFromString(xml, "application/xml");
+  if (documentXml.querySelector("parsererror")) throw new Error("Không thể đọc sheet XLSX.");
+  return [...documentXml.querySelectorAll("sheetData > row")].map((row) => {
+    const values = [];
+    row.querySelectorAll("c").forEach((cell) => {
+      const index = excelColumn(cell.getAttribute("r"));
+      const type = cell.getAttribute("t");
+      const raw = cell.querySelector("v")?.textContent || "";
+      values[index] = type === "s" ? (sharedStrings[Number(raw)] || "") : (type === "inlineStr" ? xlsxText(cell) : raw);
+    });
+    return values;
+  });
+}
+
+async function parseXlsx(file) {
+  const entries = await unzipXlsxEntries(await file.arrayBuffer());
+  const workbook = entries.get("xl/workbook.xml");
+  const relations = entries.get("xl/_rels/workbook.xml.rels");
+  if (!workbook || !relations) throw new Error("Workbook XLSX thiếu thông tin sheet.");
+  const sharedStringsXml = entries.get("xl/sharedStrings.xml");
+  const sharedStrings = sharedStringsXml
+    ? [...new DOMParser().parseFromString(sharedStringsXml, "application/xml").querySelectorAll("si")].map(xlsxText)
+    : [];
+  const workbookDoc = new DOMParser().parseFromString(workbook, "application/xml");
+  const relDoc = new DOMParser().parseFromString(relations, "application/xml");
+  const relationsById = new Map([...relDoc.querySelectorAll("Relationship")].map((item) => [item.getAttribute("Id"), item.getAttribute("Target")]));
+  const sheets = new Map();
+  workbookDoc.querySelectorAll("sheets > sheet").forEach((sheet) => {
+    const id = sheet.getAttribute("r:id") || sheet.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships", "id");
+    const target = relationsById.get(id);
+    if (!target) return;
+    const path = `xl/${target.replace(/^\//, "").replace(/^xl\//, "")}`;
+    const content = entries.get(path);
+    if (content) sheets.set(sheet.getAttribute("name") || "Sheet", rowsToObjects(parseXlsxSheet(content, sharedStrings)));
+  });
+  return sheets;
+}
+
+function detectContract(sourceName, rows) {
+  const source = normalize(sourceName.replace(/\.[^.]+$/, ""));
+  const headers = new Set(Object.keys(rows[0] || {}).map(canonicalHeader));
+  const candidates = Object.entries(IMPORT_CONTRACT).map(([key, contract]) => {
+    const nameMatch = contract.sourceNames.map(normalize).includes(source);
+    const matched = contract.required.filter((header) => headers.has(header));
+    return { key, nameMatch, matched, coverage: matched.length / contract.required.length };
+  }).sort((first, second) => (Number(second.nameMatch) - Number(first.nameMatch)) || (second.coverage - first.coverage));
+  const winner = candidates[0];
+  return winner && (winner.nameMatch || winner.coverage >= 0.7) ? winner.key : null;
+}
+
+async function fingerprint(files) {
+  const bytes = new Uint8Array(await Promise.all([...files].map((file) => file.arrayBuffer())).then((parts) => {
+    const total = parts.reduce((sum, part) => sum + part.byteLength, 0);
+    const output = new Uint8Array(total);
+    let offset = 0;
+    parts.forEach((part) => { output.set(new Uint8Array(part), offset); offset += part.byteLength; });
+    return output.buffer;
+  }));
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(hash)].map((item) => item.toString(16).padStart(2, "0")).join("");
 }
 
 const money = (value) => `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(value || 0))} ₫`;
@@ -208,6 +386,102 @@ function renderAll() {
   renderActivities();
 }
 
+function contractRows(candidate) {
+  return Object.entries(IMPORT_CONTRACT).map(([key, contract]) => {
+    const item = candidate?.tables?.[key];
+    const missing = item ? contract.required.filter((header) => !item.headers.has(header)) : contract.required;
+    const status = item && missing.length === 0 && item.rows.length > 0 ? "READY" : (item ? "BLOCKED" : "MISSING");
+    return { key, contract, item, missing, status };
+  });
+}
+
+function renderIntake(candidate) {
+  const body = document.querySelector("#intake-table");
+  const summary = document.querySelector("#intake-summary");
+  const fingerprintLabel = document.querySelector("#intake-fingerprint");
+  const preview = document.querySelector("#preview-release");
+  if (!candidate) {
+    body.innerHTML = "";
+    summary.textContent = "Chọn file để xem sheet, cột nhận diện, bản ghi và các lỗi chặn phát hành.";
+    fingerprintLabel.textContent = "Chưa có fingerprint";
+    preview.disabled = true;
+    return;
+  }
+  const rows = contractRows(candidate);
+  const ready = rows.every((row) => row.status === "READY");
+  body.innerHTML = rows.map((row) => `<tr><td><code>${row.contract.label}</code></td><td>${escapeHTML(row.item?.source || "—")}</td><td>${row.item ? row.item.rows.length.toLocaleString("vi-VN") : "—"}</td><td><span class="import-state ${row.status.toLowerCase()}">${row.status}</span></td><td>${row.missing.length ? escapeHTML(row.missing.join(", ")) : "—"}</td></tr>`).join("");
+  const extras = candidate.unmatched.length ? ` ${candidate.unmatched.length} sheet/file chưa nhận diện sẽ không được dùng.` : "";
+  summary.innerHTML = ready
+    ? `<strong>Đạt điều kiện sandbox preview.</strong> Đã kiểm tra ${candidate.files.length} file, nhận diện đủ 4 bảng và ${candidate.totalRows.toLocaleString("vi-VN")} bản ghi.${extras}`
+    : `<strong>Chưa thể phát hành.</strong> Cần đủ 4 bảng theo Data Contract, có đủ cột tối thiểu và ít nhất một bản ghi mỗi bảng.${extras}`;
+  fingerprintLabel.textContent = `SHA-256: ${candidate.hash.slice(0, 12)}…`;
+  preview.disabled = !ready;
+}
+
+function setIntakeStatus(message, kind = "neutral") {
+  const status = document.querySelector("#intake-status");
+  status.textContent = message;
+  status.className = `intake-status ${kind}`;
+}
+
+async function preflightFiles(files) {
+  const accepted = [...files].filter((file) => /\.(csv|xlsx)$/i.test(file.name));
+  if (!accepted.length) throw new Error("Hãy chọn file .xlsx hoặc .csv.");
+  if (accepted.length > 4) throw new Error("Chỉ nhận tối đa 4 CSV, hoặc 1 workbook XLSX trong một phiên kiểm tra.");
+  if (accepted.some((file) => file.size > 20 * 1024 * 1024)) throw new Error("Mỗi file tối đa 20 MB trong bước kiểm tra tại trình duyệt.");
+  if (accepted.filter((file) => /\.xlsx$/i.test(file.name)).length > 1 || (accepted.length > 1 && accepted.some((file) => /\.xlsx$/i.test(file.name)))) {
+    throw new Error("Chọn đúng một workbook XLSX, hoặc một nhóm CSV; không trộn hai loại trong cùng phiên.");
+  }
+  const tables = {};
+  const unmatched = [];
+  for (const file of accepted) {
+    const sources = /\.csv$/i.test(file.name)
+      ? new Map([[file.name, parseCSV(await file.text()).map((row) => Object.fromEntries(Object.entries(row).map(([key, value]) => [canonicalHeader(key), value])))]] )
+      : await parseXlsx(file);
+    for (const [source, rows] of sources) {
+      const key = detectContract(source, rows);
+      if (!key || tables[key]) { unmatched.push(source); continue; }
+      tables[key] = { source, rows, headers: new Set(Object.keys(rows[0] || {}).map(canonicalHeader)) };
+    }
+  }
+  return { files: accepted, tables, unmatched, hash: await fingerprint(accepted), totalRows: Object.values(tables).reduce((total, item) => total + item.rows.length, 0) };
+}
+
+async function handleImportFiles(event) {
+  const files = event.currentTarget.files;
+  try {
+    setIntakeStatus("Đang đọc cục bộ và kiểm tra Data Contract…", "working");
+    const candidate = await preflightFiles(files);
+    state.importCandidate = candidate;
+    renderIntake(candidate);
+    const ready = contractRows(candidate).every((row) => row.status === "READY");
+    setIntakeStatus(ready ? "Đạt điều kiện nạp bản xem trước sandbox. Chưa có dữ liệu nào được tải lên." : "Đã phát hiện lỗi hợp đồng. Dữ liệu đang xem vẫn không thay đổi.", ready ? "ready" : "blocked");
+  } catch (error) {
+    state.importCandidate = null;
+    renderIntake(null);
+    setIntakeStatus(error.message || "Không thể kiểm tra file.", "blocked");
+  }
+}
+
+function loadPreviewRelease() {
+  const candidate = state.importCandidate;
+  if (!candidate || !contractRows(candidate).every((row) => row.status === "READY")) return;
+  state.customer360 = candidate.tables.customer360.rows;
+  state.scoring = candidate.tables.scoring.rows;
+  state.opportunities = candidate.tables.opportunities.rows;
+  state.activities = candidate.tables.activities.rows;
+  state.scoreMap = new Map(state.scoring.map((row) => [row.customer_id, row]));
+  state.customerMap = new Map(state.customer360.map((row) => [row.customer_id, row]));
+  RELEASE = `local-preview-${candidate.hash.slice(0, 10)}`;
+  document.querySelector("#active-release").textContent = "Bản xem trước cục bộ";
+  document.querySelector("#active-release-status").textContent = "Chỉ tồn tại trong trình duyệt";
+  document.querySelector("#active-release-code").textContent = `${RELEASE} · LOCAL_PREVIEW_ONLY`;
+  document.querySelector(".warning").innerHTML = "<div><strong>BẢN XEM TRƯỚC CỤC BỘ</strong><span>Dữ liệu chỉ tồn tại trong phiên trình duyệt này. Tải lại trang sẽ quay về bản thử nghiệm đã phát hành; không có ghi dữ liệu sang production.</span></div><details class=\"technical-details\"><summary>Thông tin kỹ thuật</summary><code>release=" + escapeHTML(RELEASE) + " · LOCAL_PREVIEW_ONLY</code></details>";
+  renderAll();
+  setIntakeStatus("Đã nạp bản xem trước cục bộ. Dashboard đã đổi theo input này; tải lại trang để quay về release đã phát hành.", "ready");
+  setView("overview");
+}
+
 function renderKPIs() {
   const totals = state.customer360.reduce((aggregate, row) => ({
     revenue: aggregate.revenue + Number(row.revenue),
@@ -331,6 +605,7 @@ function setView(id) {
     customers: "Khách hàng",
     opportunities: "Cơ hội kinh doanh",
     activities: "Hoạt động CRM",
+    intake: "Nhập & phát hành dữ liệu",
     safety: "Safety Gate",
   }[id];
 }
@@ -348,11 +623,14 @@ document.addEventListener("click", (event) => {
 
 document.querySelector("#customer-search").addEventListener("input", renderCustomers);
 document.querySelector("#segment-filter").addEventListener("change", renderCustomers);
+document.querySelector("#import-files").addEventListener("change", handleImportFiles);
+document.querySelector("#preview-release").addEventListener("click", loadPreviewRelease);
 document.querySelector("#customer-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
 
 document.querySelector("#access-form").addEventListener("submit", handleAccess);
+renderIntake(null);
 if (readSession()) {
   unlockApplication().catch(() => {
     clearSession();

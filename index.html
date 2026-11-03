@@ -7,6 +7,8 @@
   <title>Tân Quang CRM Sandbox V0.1</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="auth-overrides.css">
+  <link rel="stylesheet" href="intake.css">
+  <link rel="stylesheet" href="theme.css">
 </head>
 <body class="locked">
   <section class="access-gate" id="access-gate" aria-labelledby="access-title">
@@ -34,9 +36,10 @@
         <button class="nav-item" data-view="customers">Khách hàng</button>
         <button class="nav-item" data-view="opportunities">Cơ hội</button>
         <button class="nav-item" data-view="activities">Hoạt động</button>
+        <button class="nav-item" data-view="intake">Nhập & phát hành dữ liệu</button>
         <button class="nav-item" data-view="safety">Safety Gate</button>
       </nav>
-      <div class="release-card"><span>Active release</span><strong>v0.1-31ed10f5fde0</strong><small>READY_FOR_SANDBOX_ONLY</small></div>
+      <div class="release-card"><span>Dữ liệu đang xem</span><strong id="active-release">Bản thử nghiệm an toàn</strong><small id="active-release-status">Chỉ xem và kiểm tra</small><details class="technical-details"><summary>Thông tin kỹ thuật</summary><code id="active-release-code">v0.1-31ed10f5fde0 · READY_FOR_SANDBOX_ONLY</code></details></div>
     </aside>
 
     <main>
@@ -44,7 +47,7 @@
         <div><p class="eyebrow">Customer intelligence workspace</p><h1 id="page-title">Tổng quan CRM</h1></div>
         <div class="topbar-actions"><button id="logout-button" class="logout-button" type="button">Đăng xuất</button><div class="gate-pill"><span class="dot"></span>Production BLOCKED</div></div>
       </header>
-      <div class="warning" role="alert"><strong>DỮ LIỆU MÔ PHỎNG</strong><span>Không dùng để ra quyết định kinh doanh. environment=SANDBOX · data_origin=SYNTHETIC · business_approved=FALSE</span></div>
+      <div class="warning" role="alert"><div><strong>BẢN THỬ NGHIỆM</strong><span>Chỉ dùng để xem giao diện và kiểm tra luồng dữ liệu; chưa phải cơ sở ra quyết định kinh doanh.</span></div><details class="technical-details"><summary>Thông tin kỹ thuật</summary><code>environment=SANDBOX · data_origin=SYNTHETIC · business_approved=FALSE</code></details></div>
 
       <section id="overview" class="view active">
         <div class="kpi-grid" id="kpi-grid"></div>
@@ -67,6 +70,52 @@
 
       <section id="activities" class="view">
         <div class="panel"><div class="panel-head"><div><p class="eyebrow">Engagement</p><h2>Hoạt động CRM gần nhất</h2></div></div><div id="activity-feed" class="activity-feed"></div></div>
+      </section>
+
+      <section id="intake" class="view">
+        <div class="intake-hero panel">
+          <div>
+            <p class="eyebrow">Data Intake & Release V1</p>
+            <h2>Kiểm tra trước, phát hành sau</h2>
+            <p>Chọn một workbook <strong>.xlsx</strong> có các sheet theo Data Contract, hoặc các file <strong>.csv</strong> tương ứng. File chỉ được đọc trong trình duyệt ở bước này; không tải lên cloud, không gửi sang LLM và không ghi đè dữ liệu đang xem.</p>
+          </div>
+          <span class="local-pill">LOCAL PREFLIGHT</span>
+        </div>
+        <div class="intake-grid">
+          <article class="panel">
+            <p class="eyebrow">Bước 1 · chọn đầu vào</p>
+            <h2>Kiểm tra file nguồn</h2>
+            <label class="file-picker" for="import-files">
+              <strong>Chọn .xlsx hoặc .csv</strong>
+              <span>Có thể chọn 1 workbook nhiều sheet, hoặc tối đa 4 CSV theo bảng hợp đồng.</span>
+            </label>
+            <input class="visually-hidden" id="import-files" type="file" accept=".xlsx,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple>
+            <p class="intake-hint">Không có “tự theo dõi file” cục bộ. Sau khi sửa file, hãy chọn lại file và chạy kiểm tra để tạo fingerprint mới.</p>
+            <div id="intake-status" class="intake-status neutral" aria-live="polite">Chưa có file nào được chọn.</div>
+          </article>
+          <article class="panel">
+            <p class="eyebrow">Bước 2 · điều kiện phát hành</p>
+            <h2>Contract bắt buộc</h2>
+            <ol class="contract-list">
+              <li><code>customer_360</code><span>Hồ sơ, doanh thu, công nợ</span></li>
+              <li><code>scoring_sandbox</code><span>Chỉ sandbox, không phải production score</span></li>
+              <li><code>opportunities</code><span>Pipeline có trạng thái và xác suất</span></li>
+              <li><code>crm_activities</code><span>Hoạt động có ngày và customer_id</span></li>
+            </ol>
+            <button id="preview-release" class="primary-action" type="button" disabled>Nạp bản xem trước Sandbox</button>
+            <p class="intake-hint">Chỉ bật khi 4 bảng đã đạt cấu trúc tối thiểu. Bản xem trước chỉ tồn tại trong phiên trình duyệt này; tải lại trang sẽ quay về release đã phát hành.</p>
+          </article>
+        </div>
+        <article class="panel intake-results">
+          <div class="panel-head"><div><p class="eyebrow">Bước 3 · bằng chứng kiểm tra</p><h2>Phiên nhập hiện tại</h2></div><span id="intake-fingerprint" class="muted">Chưa có fingerprint</span></div>
+          <div id="intake-summary" class="intake-empty">Chọn file để xem sheet, cột nhận diện, bản ghi và các lỗi chặn phát hành.</div>
+          <div class="table-wrap"><table class="intake-table"><thead><tr><th>Bảng hợp đồng</th><th>Nguồn nhận diện</th><th>Bản ghi</th><th>Trạng thái</th><th>Thiếu cột</th></tr></thead><tbody id="intake-table"></tbody></table></div>
+        </article>
+        <article class="panel">
+          <p class="eyebrow">Quy tắc vận hành</p>
+          <h2>Phân tách rõ ba hành động</h2>
+          <div class="control-grid intake-rules"><div><strong>Kiểm tra</strong><span>Đọc cục bộ, tạo checksum, xác định cấu trúc và lỗi.</span></div><div><strong>Nạp xem trước</strong><span>Chỉ thay đổi dashboard của phiên sandbox hiện tại.</span></div><div><strong>Phát hành lưu trữ</strong><span>Chưa mở. Bước sau sẽ lưu file vào private storage, lưu version và yêu cầu phê duyệt.</span></div><div><strong>LLM hỗ trợ</strong><span>Chưa bật. Chỉ được gợi ý mapping bằng JSON có kiểm tra, không tính KPI hoặc tự ghi dữ liệu.</span></div></div>
+        </article>
       </section>
 
       <section id="safety" class="view">

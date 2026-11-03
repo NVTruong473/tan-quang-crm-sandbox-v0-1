@@ -1,4 +1,8 @@
 const RELEASE = "v0.1-31ed10f5fde0";
+const ACCESS_HASH = "1f0384bad409c942f9addddf081f661e6615a7ab8db2b57de34393676eeeeb1a";
+const ACCESS_SESSION_KEY = "tq-crm-sandbox-access";
+let accessFailures = 0;
+let dataLoaded = false;
 
 const DATA = {
   customer360: "data/customer_360.csv",
@@ -85,6 +89,60 @@ async function load() {
   state.scoreMap = new Map(state.scoring.map((row) => [row.customer_id, row]));
   state.customerMap = new Map(state.customer360.map((row) => [row.customer_id, row]));
   renderAll();
+}
+
+async function hashAccessCode(value) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function unlockApplication() {
+  document.body.classList.remove("locked");
+  document.body.classList.add("unlocked");
+  sessionStorage.setItem(ACCESS_SESSION_KEY, "granted");
+  if (!dataLoaded) {
+    dataLoaded = true;
+    load().catch((error) => {
+      document.querySelector("#overview").innerHTML = `<div class="panel"><h2>Không tải được dữ liệu sandbox</h2><p>${escapeHTML(error.message)}</p></div>`;
+    });
+  }
+}
+
+async function handleAccess(event) {
+  event.preventDefault();
+  const input = document.querySelector("#access-code");
+  const error = document.querySelector("#access-error");
+  const button = event.currentTarget.querySelector("button");
+  const value = input.value.trim();
+  if (!/^\d{6}$/.test(value)) {
+    error.textContent = "Vui lòng nhập đúng 6 chữ số.";
+    return;
+  }
+  button.disabled = true;
+  const accepted = await hashAccessCode(value) === ACCESS_HASH;
+  if (accepted) {
+    input.value = "";
+    unlockApplication();
+    return;
+  }
+  accessFailures += 1;
+  input.value = "";
+  error.textContent = "Mã truy cập không đúng.";
+  input.focus();
+  if (accessFailures >= 5) {
+    error.textContent = "Đã nhập sai nhiều lần. Vui lòng thử lại sau 30 giây.";
+    input.disabled = true;
+    setTimeout(() => {
+      accessFailures = 0;
+      input.disabled = false;
+      button.disabled = false;
+      error.textContent = "";
+      input.focus();
+    }, 30000);
+  } else {
+    button.disabled = false;
+  }
 }
 
 function renderAll() {
@@ -241,6 +299,5 @@ document.querySelector("#customer-dialog").addEventListener("click", (event) => 
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
 
-load().catch((error) => {
-  document.querySelector("#overview").innerHTML = `<div class="panel"><h2>Không tải được dữ liệu sandbox</h2><p>${escapeHTML(error.message)}</p></div>`;
-});
+document.querySelector("#access-form").addEventListener("submit", handleAccess);
+if (sessionStorage.getItem(ACCESS_SESSION_KEY) === "granted") unlockApplication();

@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="auth-overrides.css">
   <link rel="stylesheet" href="intake.css">
   <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="release-ui.css">
 </head>
 <body class="locked">
   <section class="access-gate" id="access-gate" aria-labelledby="access-title">
@@ -103,6 +104,7 @@
               <li><code>crm_activities</code><span>Hoạt động có ngày và customer_id</span></li>
             </ol>
             <button id="preview-release" class="primary-action" type="button" disabled>Nạp bản xem trước Sandbox</button>
+            <button id="persist-import" class="secondary-action" type="button" disabled>Lưu file riêng tư để xét duyệt</button>
             <p class="intake-hint">Chỉ bật khi 4 bảng đã đạt cấu trúc tối thiểu. Bản xem trước chỉ tồn tại trong phiên trình duyệt này; tải lại trang sẽ quay về release đã phát hành.</p>
           </article>
         </div>
@@ -114,7 +116,7 @@
         <article class="panel">
           <p class="eyebrow">Quy tắc vận hành</p>
           <h2>Phân tách rõ ba hành động</h2>
-          <div class="control-grid intake-rules"><div><strong>Kiểm tra</strong><span>Đọc cục bộ, tạo checksum, xác định cấu trúc và lỗi.</span></div><div><strong>Nạp xem trước</strong><span>Chỉ thay đổi dashboard của phiên sandbox hiện tại.</span></div><div><strong>Phát hành lưu trữ</strong><span>Chưa mở. Bước sau sẽ lưu file vào private storage, lưu version và yêu cầu phê duyệt.</span></div><div><strong>LLM hỗ trợ</strong><span>Chưa bật. Chỉ được gợi ý mapping bằng JSON có kiểm tra, không tính KPI hoặc tự ghi dữ liệu.</span></div></div>
+          <div class="control-grid intake-rules"><div><strong>Kiểm tra</strong><span>Đọc cục bộ, tạo checksum, xác định cấu trúc và lỗi.</span></div><div><strong>Nạp xem trước</strong><span>Chỉ thay đổi dashboard của phiên sandbox hiện tại.</span></div><div><strong>Lưu để xét duyệt</strong><span>Đưa file vào private storage, tạo version bất biến và audit log; chưa phát hành dashboard.</span></div><div><strong>LLM hỗ trợ</strong><span>Chưa bật. Chỉ được gợi ý mapping bằng JSON có kiểm tra, không tính KPI hoặc tự ghi dữ liệu.</span></div></div>
         </article>
       </section>
 

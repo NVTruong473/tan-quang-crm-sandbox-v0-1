@@ -177,10 +177,11 @@ function rowsCsv(rows: Array<Record<string, unknown>>) { const headers = Object.
 async function activeData(request: Request, key: keyof typeof DATA_FILES) {
   if (!(await authenticatedAdmin(request))) return json(request, { error: "admin_auth_required" }, 401);
   const client = serviceClient();
-  const active = await client.from("crm_runtime_state").select("active_release_id,crm_releases!inner(import_id,status)").eq("singleton", true).maybeSingle();
-  const release = active.data?.crm_releases as unknown as { import_id?: string; status?: string } | null;
-  if (active.error || !active.data?.active_release_id || release?.status !== "ACTIVE" || !release.import_id) return new Response(DATA_FILES[key], { status: 200, headers: responseHeaders(request, "text/csv; charset=utf-8") });
-  const materialized = await client.from("crm_materialized_payloads").select("payload").eq("import_id", release.import_id).maybeSingle();
+  const runtime = await client.from("crm_runtime_state").select("active_release_id").eq("singleton", true).maybeSingle();
+  if (runtime.error || !runtime.data?.active_release_id) return new Response(DATA_FILES[key], { status: 200, headers: responseHeaders(request, "text/csv; charset=utf-8") });
+  const release = await client.from("crm_releases").select("import_id,status").eq("id", runtime.data.active_release_id).maybeSingle();
+  if (release.error || release.data?.status !== "ACTIVE" || !release.data.import_id) return json(request, { error: "active_release_pointer_invalid" }, 500);
+  const materialized = await client.from("crm_materialized_payloads").select("payload").eq("import_id", release.data.import_id).maybeSingle();
   const table = key.replace(/\.csv$/, "") === "scoring_sandbox" ? "scoring_sandbox" : key.replace(/\.csv$/, "").replace("customer_360", "customer_360");
   const rows = (materialized.data?.payload as Record<string, Array<Record<string, unknown>>> | undefined)?.[table];
   if (!rows?.length) return json(request, { error: "active_materialization_invalid" }, 500);

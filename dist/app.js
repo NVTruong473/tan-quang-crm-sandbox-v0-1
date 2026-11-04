@@ -11,6 +11,8 @@ const DATA = {
   evidence: `${API_BASE}/data/evidence_ledger.csv`,
   triage: `${API_BASE}/data/cskh_triage.csv`,
   unattributed: `${API_BASE}/data/unattributed_contracts.csv`,
+  workQueue: `${API_BASE}/data/work_queue.csv`,
+  activityLedger: `${API_BASE}/data/activity_outcome_ledger.csv`,
 };
 
 const state = {
@@ -21,6 +23,8 @@ const state = {
   evidence: [],
   triage: [],
   unattributed: [],
+  workQueue: [],
+  activityLedger: [],
   customerMap: new Map(),
   scoreMap: new Map(),
   importCandidate: null,
@@ -647,7 +651,11 @@ function renderActivities() {
 function renderTriage() {
   const triageBody = document.querySelector("#triage-table");
   const unattributedBody = document.querySelector("#unattributed-table");
+  const queueBody = document.querySelector("#work-queue-table");
+  const activityBody = document.querySelector("#activity-ledger-table");
   if (!triageBody || !unattributedBody) return;
+  if (queueBody) queueBody.innerHTML = state.workQueue.map((row) => `<tr><td><code>${escapeHTML(row.task_id)}</code></td><td>${escapeHTML(row.customer_id)}</td><td><span class="segment">${escapeHTML(row.priority)}</span></td><td>${escapeHTML(row.queue)}</td><td>${escapeHTML(row.owner)}</td><td>${escapeHTML(row.due_date)}</td><td>${escapeHTML(row.task_status)}</td><td>${escapeHTML(row.action_required)}</td></tr>`).join("") || '<tr><td colspan="8">Chưa có task CSKH.</td></tr>';
+  if (activityBody) activityBody.innerHTML = state.activityLedger.length ? state.activityLedger.map((row) => `<tr><td>${escapeHTML(row.activity_id)}</td><td>${escapeHTML(row.task_id)}</td><td>${escapeHTML(row.customer_id)}</td><td>${escapeHTML(row.activity_date)}</td><td>${escapeHTML(row.activity_type)}</td><td>${escapeHTML(row.contact_outcome)}</td><td>${escapeHTML(row.next_action)}</td><td>${escapeHTML(row.activity_status)}</td></tr>`).join("") : '<tr><td colspan="8">Chưa có hoạt động được xác nhận.</td></tr>';
   triageBody.innerHTML = state.triage.map((row) => `<tr data-customer="${escapeHTML(row.customer_id)}"><td><strong>${escapeHTML(row.customer_id)}</strong><br><small>${escapeHTML(row.customer_name)}</small></td><td><span class="segment">${escapeHTML(row.triage_priority)}</span></td><td>${escapeHTML(row.triage_queue)}</td><td>${moneyOrNA(row.verified_revenue)}</td><td>${moneyOrNA(row.outstanding)}</td><td>${escapeHTML(row.evidence_status)}</td><td>${escapeHTML(row.cskh_action)}</td></tr>`).join("") || '<tr><td colspan="7">Không có hàng đợi CSKH.</td></tr>';
   unattributedBody.innerHTML = state.unattributed.slice(0, 200).map((row) => `<tr><td><code>${escapeHTML(row.unattributed_id)}</code></td><td>${escapeHTML(row.source_row)}</td><td>${escapeHTML(row.contract_id || "—")}</td><td>${moneyOrNA(row.contract_value)}</td><td>${moneyOrNA(row.recognized_revenue)}</td><td><span class="segment">${escapeHTML(row.issue_code)}</span></td><td>${escapeHTML(row.disposition)}</td></tr>`).join("") || '<tr><td colspan="7">Không có hợp đồng chưa định danh.</td></tr>';
 }

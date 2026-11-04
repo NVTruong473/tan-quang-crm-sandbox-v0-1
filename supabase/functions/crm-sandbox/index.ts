@@ -184,7 +184,7 @@ async function activeData(request: Request, key: keyof typeof DATA_FILES) {
   const materialized = await client.from("crm_materialized_payloads").select("payload").eq("import_id", release.data.import_id).maybeSingle();
   const table = key.replace(/^data\//, "").replace(/\.csv$/, "");
   const rows = (materialized.data?.payload as Record<string, Array<Record<string, unknown>>> | undefined)?.[table];
-  if (!rows?.length) return json(request, { error: "active_materialization_invalid" }, 500);
+  if (!rows?.length) return new Response(DATA_FILES[key], { status: 200, headers: responseHeaders(request, "text/csv; charset=utf-8") });
   return new Response(rowsCsv(rows), { status: 200, headers: responseHeaders(request, "text/csv; charset=utf-8") });
 }
 

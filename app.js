@@ -242,6 +242,7 @@ async function fingerprint(files) {
 }
 
 const money = (value) => `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(Number(value || 0))} ₫`;
+const moneyOrNA = (value) => String(value ?? "").trim() === "" ? "Chưa có dữ liệu" : money(value);
 const compact = (value) => new Intl.NumberFormat("vi-VN", { notation: "compact", maximumFractionDigits: 1 }).format(Number(value || 0));
 const pct = (value) => new Intl.NumberFormat("vi-VN", { style: "percent", maximumFractionDigits: 1 }).format(Number(value || 0));
 const escapeHTML = (value) => String(value ?? "").replace(/[&<>'"]/g, (character) => ({
@@ -615,7 +616,7 @@ function renderCustomers() {
 
   const body = rows.map((row) => {
     const status = row.evidence_status === "CONTRACT_HISTORY_PRESENT" ? "Có bằng chứng" : row.evidence_status === "REVIEW_COST_EVIDENCE" ? "Kiểm tra giá vốn" : "Thiếu bằng chứng";
-    return `<tr data-customer="${row.customer_id}"><td><div class="customer-cell"><strong>${escapeHTML(row.customer_name)}</strong><span>${row.customer_id}</span></div></td><td>${money(row.revenue)}</td><td>${money(row.gross_profit)}</td><td>${money(row.outstanding)}</td><td>${Number(row.contract_count || 0)}</td><td><span class="segment">${status}</span></td><td>${escapeHTML(row.priority_reason || "Cần rà soát")}</td></tr>`;
+    return `<tr data-customer="${row.customer_id}"><td><div class="customer-cell"><strong>${escapeHTML(row.customer_name)}</strong><span>${row.customer_id}</span></div></td><td>${moneyOrNA(row.revenue)}</td><td>${moneyOrNA(row.gross_profit)}</td><td>${moneyOrNA(row.outstanding)}</td><td>${Number(row.contract_count || 0)}</td><td><span class="segment">${status}</span></td><td>${escapeHTML(row.priority_reason || "Cần rà soát")}</td></tr>`;
   }).join("");
   document.querySelector("#customer-table").innerHTML = body || '<tr><td colspan="7">Không có kết quả phù hợp.</td></tr>';
 }
@@ -642,9 +643,9 @@ function showCustomer(id) {
   if (!row) return;
   const metrics = [
     ["Số hợp đồng liên kết", row.contract_count || "0"],
-    ["Doanh thu hợp đồng", money(row.revenue)],
-    ["Lợi nhuận đã xác nhận", money(row.gross_profit)],
-    ["Công nợ", money(row.outstanding)],
+    ["Doanh thu hợp đồng", moneyOrNA(row.revenue)],
+    ["Lợi nhuận đã xác nhận", moneyOrNA(row.gross_profit)],
+    ["Công nợ", moneyOrNA(row.outstanding)],
     ["Trạng thái bằng chứng", row.evidence_status || "Chưa xác định"],
   ];
   const metricHTML = metrics.map(([label, value]) => `<div class="detail-metric"><span>${label}</span><strong>${value}</strong></div>`).join("");

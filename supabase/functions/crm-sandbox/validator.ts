@@ -64,7 +64,7 @@ function tableKey(name: string, rows: Array<Record<string, string>>) { const n =
 function finite(row: Record<string, string>, field: string, table: string, index: number) { if (!Number.isFinite(Number(row[field]))) throw new Error(`${table}:ROW_${index + 2}_${field.toUpperCase()}_INVALID`); }
 function field(row: Record<string, string>, ...aliases: string[]) { return Object.entries(row).find(([key]) => aliases.some((alias) => normal(key) === normal(alias) || normal(key).startsWith(normal(alias))))?.[1]?.trim() ?? ""; }
 function numberOrZero(value: string) { const number = Number(value); return Number.isFinite(number) ? number : 0; }
-function customerContractProfile(sources: Map<string, Array<Record<string, string>>>): Materialization | null {
+function customerContractProfile(sources: Map<string, Array<Record<string, string>>>, sourceFile = "uploaded_workbook.xlsx"): Materialization | null {
   const customerSheet = [...sources.entries()].find(([name]) => normal(name).startsWith("01_khach_hang"));
   const contractSheet = [...sources.entries()].find(([name]) => normal(name).startsWith("02_hop_dong"));
   if (!customerSheet || !contractSheet) return null;
@@ -113,7 +113,6 @@ function customerContractProfile(sources: Map<string, Array<Record<string, strin
   }));
   const evidenceLedger: Array<Record<string, string>> = [];
   const validatorVersion = "CUSTOMER_CONTRACT_WORKBOOK_ADAPTER_V1";
-  const sourceFile = "uploaded_workbook.xlsx";
   const metricKeys: Record<string, string> = { "Doanh thu hợp đồng": "revenue", "Lợi nhuận gộp": "gross_profit", "Công nợ": "outstanding", "Số hợp đồng": "contract_count", "Coverage điểm": "coverage", "Trạng thái bằng chứng": "evidence_status" };
   const addEvidence = (customerId: string, label: string, value: string, fields: string, hint: string, derivation: string, status: string) => evidenceLedger.push({
     metric_key: metricKeys[label] ?? "metric", customer_id: customerId, metric_label: label, value,
@@ -136,7 +135,7 @@ function customerContractProfile(sources: Map<string, Array<Record<string, strin
 export async function validateAndMaterialize(files: InputFile[]): Promise<Materialization> {
   if (!files.length || files.length > 4) throw new Error("FILE_COUNT_INVALID"); const total = files.reduce((n, file) => n + file.bytes.byteLength, 0); if (total > MAX_SOURCE_BYTES) throw new Error("SOURCE_SIZE_EXCEEDS_8MB_VALIDATION_LIMIT"); const workbook = files.filter((f) => /\.xlsx$/i.test(f.name)); if (workbook.length > 1 || (workbook.length && files.length !== 1) || files.some((f) => !/\.(xlsx|csv)$/i.test(f.name))) throw new Error("INPUT_COMBINATION_INVALID");
   const sources = new Map<string, Array<Record<string, string>>>(); if (workbook.length) for (const [name, rows] of await xlsx(workbook[0].bytes)) sources.set(name, rows); else for (const file of files) sources.set(file.name, csv(text(file.bytes)));
-  const profile = workbook.length ? customerContractProfile(sources) : null; if (profile) return profile;
+  const profile = workbook.length ? customerContractProfile(sources, workbook[0].name) : null; if (profile) return profile;
   const tables: Record<string, Array<Record<string, string>>> = {}; for (const [name, rows] of sources) { const key = tableKey(name, rows); if (!key || tables[key]) throw new Error(`TABLE_NOT_RECOGNIZED_OR_DUPLICATE:${name}`); tables[key] = rows; }
   for (const [key, fields] of Object.entries(REQUIRED)) { const rows = tables[key]; if (!rows?.length) throw new Error(`TABLE_REQUIRED:${key}`); const missing = fields.filter((field) => !(field in rows[0])); if (missing.length) throw new Error(`HEADER_REQUIRED:${key}:${missing.join(",")}`); }
   const records = Object.values(tables).reduce((n, rows) => n + rows.length, 0); if (records > MAX_ROWS) throw new Error("ROW_LIMIT_EXCEEDED"); const ids = new Set<string>();

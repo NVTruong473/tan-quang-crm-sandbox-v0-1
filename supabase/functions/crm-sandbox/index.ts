@@ -3,7 +3,13 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { validateAndMaterialize, type InputFile } from "./validator.ts";
 
 const FUNCTION_NAME = "crm-sandbox";
-const FRONTEND_ORIGIN = "https://nvtruong473.github.io";
+const ALLOWED_FRONTEND_ORIGINS = new Set([
+  "https://nvtruong473.github.io",
+  "http://localhost:4173",
+  "http://localhost:4174",
+  "http://127.0.0.1:4173",
+  "http://127.0.0.1:4174",
+]);
 
 function routePath(url: URL): string {
   const marker = `/${FUNCTION_NAME}`;
@@ -19,8 +25,9 @@ function responseHeaders(request: Request, contentType = "application/json; char
     "vary": "Origin",
     "x-content-type-options": "nosniff",
   });
-  if (request.headers.get("origin") === FRONTEND_ORIGIN) {
-    headers.set("access-control-allow-origin", FRONTEND_ORIGIN);
+  const origin = request.headers.get("origin");
+  if (origin && ALLOWED_FRONTEND_ORIGINS.has(origin)) {
+    headers.set("access-control-allow-origin", origin);
     headers.set("access-control-allow-methods", "GET, POST, OPTIONS");
     headers.set("access-control-allow-headers", "authorization, apikey, content-type, x-file-name");
     headers.set("access-control-max-age", "600");

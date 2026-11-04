@@ -73,9 +73,10 @@ function customerContractProfile(sources: Map<string, Array<Record<string, strin
   const ids = new Set<string>();
   for (const customer of customers) { const id = field(customer, "ma_kh"); if (ids.has(id)) throw new Error("CUSTOMER_CONTRACT_PROFILE_DUPLICATE_CUSTOMER_ID"); ids.add(id); }
   const byCustomer = new Map<string, { count: number; revenue: number; profit: number; outstanding: number; incompleteCost: number }>();
-  const contractsByCustomer = new Map<string, Array<Record<string, string>>>();
+  const contractsByCustomer = new Map<string, Array<Record<string, string> & { __source_row?: string }>>();
   let orphanContracts = 0; let validContracts = 0;
-  for (const row of contractSheet[1]) {
+  for (const [sourceIndex, rawRow] of contractSheet[1].entries()) {
+    const row = Object.assign({}, rawRow, { __source_row: String(sourceIndex + 2) });
     const contractId = field(row, "ma_hd"); if (!contractId) continue;
     const customerId = field(row, "ma_kh"); if (!customerId || !ids.has(customerId)) { orphanContracts += 1; continue; }
     const status = field(row, "tinh_trang"); if (normal(status) === "huy") continue;
@@ -110,7 +111,27 @@ function customerContractProfile(sources: Map<string, Array<Record<string, strin
     priority_reason: row.priority_reason,
     cskh_action: row.evidence_status === "NEEDS_CONTRACT_EVIDENCE" ? "Thu thập bằng chứng hợp đồng trước khi xếp hạng" : row.evidence_status === "REVIEW_COST_EVIDENCE" ? "Xác nhận giá vốn/công nợ trước khi đánh giá lợi nhuận" : "Phân công CSKH rà soát nhu cầu và khả năng tái ký",
   }));
-  return { tables: { customer_360: customer360, scoring_sandbox: triage, opportunities: [], crm_activities: [] }, record_counts: { customer_360: customer360.length, scoring_sandbox: triage.length, opportunities: 0, crm_activities: 0 }, report: { validator_version: "CUSTOMER_CONTRACT_WORKBOOK_ADAPTER_V1", contract_version: "TAN_QUANG_CUSTOMER_CONTRACT_V1", source_profile: "CUSTOMER_CONTRACT", customers: customer360.length, linked_contracts: validContracts, quarantined_orphan_contracts: orphanContracts, scorecard: { rule_version: "BOSS_RULE_100_V1", official_scoring: "BLOCKED", reason: "MISSING_REQUIRED_DOMAINS", cskh_triage: "EVIDENCE_ONLY" }, unavailable_domains: ["sales_pipeline", "crm_activities", "approved_potential_score"], result: "VALIDATED_WITH_LIMITATIONS" } };
+  const evidenceLedger: Array<Record<string, string>> = [];
+  const validatorVersion = "CUSTOMER_CONTRACT_WORKBOOK_ADAPTER_V1";
+  const sourceFile = "uploaded_workbook.xlsx";
+  const metricKeys: Record<string, string> = { "Doanh thu hợp đồng": "revenue", "Lợi nhuận gộp": "gross_profit", "Công nợ": "outstanding", "Số hợp đồng": "contract_count", "Coverage điểm": "coverage", "Trạng thái bằng chứng": "evidence_status" };
+  const addEvidence = (customerId: string, label: string, value: string, fields: string, hint: string, derivation: string, status: string) => evidenceLedger.push({
+    metric_key: metricKeys[label] ?? "metric", customer_id: customerId, metric_label: label, value,
+    source_file: sourceFile, source_sheet: "01 Khach hang + 02 Hop dong", source_fields: fields, source_record_hint: hint,
+    derivation, evidence_status: status, validator_version: validatorVersion,
+  });
+  for (const row of customer360) {
+    const linked = contractsByCustomer.get(row.customer_id) ?? [];
+    const hint = linked.length ? linked.map((contract) => `02 Hop dong!row_${contract.__source_row ?? "?"}`).join("; ") : "01 Khach hang!customer_id=" + row.customer_id;
+    const status = row.evidence_status === "CONTRACT_HISTORY_PRESENT" ? "DIRECT_OR_DERIVED" : "MISSING_SOURCE_EVIDENCE";
+    addEvidence(row.customer_id, "Doanh thu hợp đồng", row.revenue, "Mã KH; Doanh thu ghi nhận", hint, "SUM(Doanh thu ghi nhận) theo Mã KH, loại trừ hợp đồng hủy", status);
+    addEvidence(row.customer_id, "Lợi nhuận gộp", row.gross_profit, "Mã KH; Doanh thu ghi nhận; Giá vốn; Xác nhận giá vốn", hint, "SUM(Doanh thu ghi nhận - Giá vốn) chỉ khi Xác nhận giá vốn=Đã xác nhận", row.evidence_status === "REVIEW_COST_EVIDENCE" ? "MISSING_COST_EVIDENCE" : status);
+    addEvidence(row.customer_id, "Công nợ", row.outstanding, "Mã KH; Công nợ", hint, "SUM(Công nợ) theo Mã KH, loại trừ hợp đồng hủy", status);
+    addEvidence(row.customer_id, "Số hợp đồng", row.contract_count, "Mã KH; Mã HĐ; Tình trạng", hint, "COUNT(Mã HĐ) theo Mã KH, loại trừ hợp đồng hủy", status);
+    addEvidence(row.customer_id, "Coverage điểm", row.score_coverage_pct, "Các trường có dữ liệu trong 5 nhóm rule", hint, "Tổng trọng số sếp chỉ khi trường nguồn đủ; không nội suy ô trống", "DERIVED_WITH_COVERAGE");
+    addEvidence(row.customer_id, "Trạng thái bằng chứng", row.evidence_status, "Mã KH; Mã HĐ; Giá vốn; Xác nhận giá vốn", hint, "Luật validator CUSTOMER_CONTRACT_WORKBOOK_ADAPTER_V1", status);
+  }
+  return { tables: { customer_360: customer360, scoring_sandbox: triage, opportunities: [], crm_activities: [], evidence_ledger: evidenceLedger }, record_counts: { customer_360: customer360.length, scoring_sandbox: triage.length, opportunities: 0, crm_activities: 0, evidence_ledger: evidenceLedger.length }, report: { validator_version: validatorVersion, contract_version: "TAN_QUANG_CUSTOMER_CONTRACT_V1", source_profile: "CUSTOMER_CONTRACT", customers: customer360.length, linked_contracts: validContracts, quarantined_orphan_contracts: orphanContracts, evidence_ledger: { rows: evidenceLedger.length, grain: "customer-metric", raw_source_required: true }, scorecard: { rule_version: "BOSS_RULE_100_V1", official_scoring: "BLOCKED", reason: "MISSING_REQUIRED_DOMAINS", cskh_triage: "EVIDENCE_ONLY" }, unavailable_domains: ["sales_pipeline", "crm_activities", "approved_potential_score"], result: "VALIDATED_WITH_LIMITATIONS" } };
 }
 export async function validateAndMaterialize(files: InputFile[]): Promise<Materialization> {
   if (!files.length || files.length > 4) throw new Error("FILE_COUNT_INVALID"); const total = files.reduce((n, file) => n + file.bytes.byteLength, 0); if (total > MAX_SOURCE_BYTES) throw new Error("SOURCE_SIZE_EXCEEDS_8MB_VALIDATION_LIMIT"); const workbook = files.filter((f) => /\.xlsx$/i.test(f.name)); if (workbook.length > 1 || (workbook.length && files.length !== 1) || files.some((f) => !/\.(xlsx|csv)$/i.test(f.name))) throw new Error("INPUT_COMBINATION_INVALID");

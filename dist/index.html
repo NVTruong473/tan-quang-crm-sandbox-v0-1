@@ -35,6 +35,7 @@
       <nav aria-label="Điều hướng chính">
         <button class="nav-item active" data-view="overview">Ưu tiên CSKH</button>
         <button class="nav-item" data-view="customers">Danh sách khách hàng</button>
+        <button class="nav-item" data-view="scorecard">Điểm khách hàng</button>
         <button class="nav-item" data-view="intake">Nhập & phát hành dữ liệu</button>
         <button class="nav-item" data-view="safety">Safety Gate</button>
       </nav>
@@ -61,6 +62,19 @@
       <section id="customers" class="view">
         <div class="toolbar"><label class="search"><span>Tìm kiếm</span><input id="customer-search" type="search" placeholder="Tên hoặc mã khách hàng"></label><label><span>Phân nhóm</span><select id="segment-filter"><option value="ALL">Tất cả</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label></div>
         <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Khách hàng</th><th>Doanh thu hợp đồng</th><th>Lợi nhuận đã xác nhận</th><th>Công nợ</th><th>Số hợp đồng</th><th>Trạng thái bằng chứng</th><th>Hành động CSKH</th></tr></thead><tbody id="customer-table"></tbody></table></div></div>
+      </section>
+
+      <section id="scorecard" class="view">
+        <article class="panel intake-hero">
+          <div><p class="eyebrow">Rule chính thức của Ban giám đốc</p><h2>Thang điểm khách hàng 100 điểm</h2><p>Giữ nguyên 5 nhóm trọng số và ngưỡng A/B/C/D do sếp giao. Các cách đo chi tiết bên dưới là đề xuất kỹ thuật để giải thích điểm, phát hiện thiếu dữ liệu và chuyển điểm thành hành động CSKH — không tự thay đổi luật chấm.</p></div>
+          <span class="local-pill">CHƯA KÍCH HOẠT XẾP HẠNG</span>
+        </article>
+        <div class="content-grid">
+          <article class="panel span-2"><div class="panel-head"><div><p class="eyebrow">Official framework</p><h2>5 nhóm điểm do sếp quy định</h2></div></div><div class="table-wrap"><table><thead><tr><th>Nhóm</th><th>Điểm</th><th>Tiêu chí</th><th>Hành động CSKH khi có tín hiệu</th></tr></thead><tbody><tr><td>Giá trị lợi nhuận</td><td>30</td><td>LN gộp 3 năm, biên LN, đóng góp gần đây</td><td>Giữ quan hệ, tìm cơ hội tái ký/mở rộng</td></tr><tr><td>Ổn định hợp tác</td><td>25</td><td>Số năm, tần suất, độ mới hợp đồng</td><td>Gọi chủ động khi tần suất/độ mới suy giảm</td></tr><tr><td>Tiềm năng phát triển</td><td>20</td><td>Dự án mới, bảo trì, mở rộng</td><td>Phân công tư vấn và lịch follow-up theo bằng chứng</td></tr><tr><td>Uy tín thanh toán</td><td>15</td><td>Đúng hạn, mức độ chậm thanh toán</td><td>Phối hợp kế toán, kiểm soát điều khoản trước chào bán mới</td></tr><tr><td>Chất lượng hợp tác</td><td>10</td><td>Phối hợp, quan hệ người quyết định</td><td>Thăm khách hoặc xây quan hệ nhiều đầu mối</td></tr></tbody></table></div></article>
+          <article class="panel"><p class="eyebrow">A/B/C/D</p><h2>Ngưỡng của sếp</h2><div class="pipeline-summary"><div class="pipeline-metric"><span>A · 85–100</span><strong>Chiến lược</strong></div><div class="pipeline-metric"><span>B · 70–84</span><strong>Phát triển</strong></div><div class="pipeline-metric"><span>C · 50–69</span><strong>Duy trì</strong></div><div class="pipeline-metric"><span>D · dưới 50</span><strong>Ưu tiên thấp</strong></div></div></article>
+          <article class="panel span-2"><p class="eyebrow">Lớp đề xuất tăng cường</p><h2>Điểm dẫn đến hành động, không chỉ là xếp hạng</h2><div class="control-grid intake-rules"><div><strong>Coverage dữ liệu</strong><span>Hiện tỷ lệ trọng số có bằng chứng; để trống khác 0. Không đủ dữ liệu thì không gán A/B/C/D.</span></div><div><strong>Cảnh báo rủi ro</strong><span>Tách cảnh báo công nợ quá hạn và giảm hợp tác khỏi điểm để CSKH không bỏ sót khách giá trị cao có rủi ro.</span></div><div><strong>Hàng đợi CSKH</strong><span>Ưu tiên theo điểm đã duyệt, cảnh báo và thời điểm cần liên hệ; vẫn cho phép quản trị viên ghi lý do ngoại lệ.</span></div><div><strong>Giải thích được</strong><span>Mỗi điểm phải truy ra nguồn, công thức, ngày chốt số liệu và người xác nhận; không có điểm AI tự suy đoán.</span></div></div></article>
+          <article class="panel"><p class="eyebrow">Trạng thái hiện tại</p><h2>Chưa được phép chấm chính thức</h2><div class="status-block blocked">CHƯA ĐỦ DỮ LIỆU</div><p>Workbook hiện có công thức chấm điểm nháp, nhưng dữ liệu hợp đồng liên kết và các tín hiệu tiềm năng/thanh toán chưa đủ. Hệ thống chỉ hiển thị hàng đợi bổ sung bằng chứng.</p><p class="intake-hint">Khi đủ dữ liệu, màn này sẽ hiển thị điểm, Coverage, nguồn giải thích và hành động CSKH cho từng khách.</p></article>
+        </div>
       </section>
 
       <section id="opportunities" class="view">

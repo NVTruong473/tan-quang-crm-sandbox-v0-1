@@ -596,9 +596,10 @@ function renderAttention() {
 function renderPipelineSummary() {
   const linked = state.customer360.filter((row) => Number(row.contract_count || 0) > 0);
   const revenue = linked.reduce((total, row) => total + Number(row.revenue || 0), 0);
+  const orphans = Number(state.customer360[0]?.orphan_contract_count || 0);
   document.querySelector("#pipeline-summary").innerHTML = [
     ["Khách có HĐ liên kết", linked.length],
-    ["Hợp đồng chưa gắn khách", "1"],
+    ["Hợp đồng chưa gắn khách", orphans],
     ["Doanh thu có bằng chứng", money(revenue)],
   ].map(([label, value]) => `<div class="pipeline-metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
 }

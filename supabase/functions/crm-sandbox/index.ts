@@ -116,7 +116,7 @@ async function uploadImport(request: Request) {
   try { materialized = await validateAndMaterialize(incoming); }
   catch (error) { return json(request, { error: "server_validation_failed", reason: error instanceof Error ? error.message : "VALIDATION_FAILED" }, 422); }
   const fileHashes = await Promise.all(incoming.map((file) => sha256(file.bytes)));
-  const bundleHash = await sha256(new TextEncoder().encode(JSON.stringify(incoming.map((file, index) => ({ name: file.name, sha256: fileHashes[index]})))));
+  const bundleHash = await sha256(new TextEncoder().encode(JSON.stringify({ validator_version: materialized.report.validator_version ?? "SERVER_VALIDATOR_V1", files: incoming.map((file, index) => ({ name: file.name, sha256: fileHashes[index] })) })));
   const client = serviceClient();
   const existing = await client.from("crm_import_versions").select("id,status").eq("sha256", bundleHash).maybeSingle();
   if (existing.error) return json(request, { error: "registry_lookup_failed" }, 500);

@@ -171,6 +171,26 @@ async function releases(request: Request) {
   return result.error ? json(request, { error: "release_read_failed" }, 500) : json(request, { data: result.data });
 }
 
+async function activityOutcomes(request: Request) {
+  const admin = await authenticatedAdmin(request);
+  if (!admin) return json(request, { error: "admin_auth_required" }, 401);
+  const client = userRpcClient(request);
+  if (request.method === "GET") {
+    const result = await client.from("crm_activity_outcomes").select("id,activity_id,task_id,customer_id,activity_date,activity_type,owner,contact_outcome,next_action,next_due_date,evidence_reference,activity_status,notes,created_by,created_at").order("activity_date", { ascending: false }).limit(200);
+    return result.error ? json(request, { error: "activity_read_failed" }, 500) : json(request, { data: result.data });
+  }
+  const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  const required = ["activity_id", "task_id", "customer_id", "activity_date", "activity_type", "owner", "contact_outcome", "next_action", "evidence_reference"];
+  if (required.some((key) => typeof body[key] !== "string" || !String(body[key]).trim())) return json(request, { error: "activity_required_fields_missing", required }, 422);
+  const clientRpc = userRpcClient(request);
+  const result = await clientRpc.rpc("append_crm_activity_outcome", {
+    p_activity_id: body.activity_id, p_task_id: body.task_id, p_customer_id: body.customer_id, p_activity_date: body.activity_date,
+    p_activity_type: body.activity_type, p_owner: body.owner, p_contact_outcome: body.contact_outcome, p_next_action: body.next_action,
+    p_next_due_date: body.next_due_date || null, p_evidence_reference: body.evidence_reference, p_activity_status: body.activity_status || "RECORDED", p_notes: body.notes || "",
+  });
+  return result.error ? json(request, { error: "activity_capture_rejected", reason: result.error.message }, 409) : json(request, { data: result.data }, 201);
+}
+
 function csvValue(value: unknown) { const raw = String(value ?? ""); return /[",\n\r]/.test(raw) ? `"${raw.replace(/"/g, '""')}"` : raw; }
 function rowsCsv(rows: Array<Record<string, unknown>>) { const headers = Object.keys(rows[0] ?? {}); return [headers.join(","), ...rows.map((row) => headers.map((h) => csvValue(row[h])).join(","))].join("\n"); }
 
@@ -200,10 +220,11 @@ Deno.serve(async (request: Request) => {
   if (path === "/releases/create" && request.method === "POST") return releaseAction(request, "create");
   if (path === "/releases/approve" && request.method === "POST") return releaseAction(request, "approve");
   if (path === "/releases/activate" && request.method === "POST") return releaseAction(request, "activate");
+  if (path === "/activities" && (request.method === "GET" || request.method === "POST")) return activityOutcomes(request);
   if (request.method !== "GET") return json(request, { error: "method_not_allowed" }, 405);
 
   if (path === "/health") {
-    return json(request, { status: "ok", release: "CUSTOMER_CONTRACT_V1", production_gate: "BLOCKED", data_origin: "SOURCE_WORKBOOK", official_score: "BLOCKED_BY_SCORE_READINESS_GATE", auth: "supabase_admin_required" });
+    return json(request, { status: "ok", release: "CUSTOMER_CONTRACT_V1", production_gate: "BLOCKED", data_origin: "SOURCE_WORKBOOK", official_score: "BLOCKED_BY_SCORE_READINESS_GATE", activity_capture: "ENABLED_APPEND_ONLY", auth: "supabase_admin_required" });
   }
 
   if (!(dataKey in DATA_FILES)) return json(request, { error: "not_found" }, 404);

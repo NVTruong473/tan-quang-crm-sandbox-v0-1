@@ -182,7 +182,7 @@ async function activeData(request: Request, key: keyof typeof DATA_FILES) {
   const release = await client.from("crm_releases").select("import_id,status").eq("id", runtime.data.active_release_id).maybeSingle();
   if (release.error || release.data?.status !== "ACTIVE" || !release.data.import_id) return json(request, { error: "active_release_pointer_invalid" }, 500);
   const materialized = await client.from("crm_materialized_payloads").select("payload").eq("import_id", release.data.import_id).maybeSingle();
-  const table = key.replace(/\.csv$/, "") === "scoring_sandbox" ? "scoring_sandbox" : key.replace(/\.csv$/, "").replace("customer_360", "customer_360");
+  const table = key.replace(/^data\//, "").replace(/\.csv$/, "");
   const rows = (materialized.data?.payload as Record<string, Array<Record<string, unknown>>> | undefined)?.[table];
   if (!rows?.length) return json(request, { error: "active_materialization_invalid" }, 500);
   return new Response(rowsCsv(rows), { status: 200, headers: responseHeaders(request, "text/csv; charset=utf-8") });

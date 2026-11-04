@@ -30,10 +30,9 @@ CRM đã trả lời được “nên ưu tiên rà soát khách nào trước d
 ## 5. Cách xem sản phẩm
 
 1. Tải gói frontend từ Supabase Storage.
-2. Giải nén và mở `index.html` trên máy; đăng nhập bằng tài khoản admin được bàn giao riêng.
-3. Backend/API vẫn chạy tại Supabase và chỉ trả dữ liệu sau khi Supabase Auth xác thực.
-
-Supabase mặc định không phải static-site host cho HTML tương tác trên URL dự án; vì vậy gói frontend được cung cấp dưới dạng artifact tải xuống. Không gửi GitHub Pages làm link chính thức.
+2. Giải nén, mở Terminal tại thư mục chứa `index.html` và chạy `python3 -m http.server 4173`.
+3. Mở `http://localhost:4173/index.html` rồi đăng nhập bằng tài khoản admin được bàn giao riêng.
+4. Backend/API và dữ liệu CRM chạy trên Supabase; dữ liệu chỉ tải sau khi Supabase Auth xác thực.
 
 ## 6. Điều chưa được phép tuyên bố
 

@@ -35,3 +35,7 @@ Khi chưa đạt, CRM chỉ hiển thị hàng đợi CSKH theo bằng chứng v
 - 17 khách được materialize từ đúng workbook nguồn; 16 khách có Coverage `0%`, 1 khách có Coverage `50%`.
 - 17/17 bản ghi giữ `NOT_READY`; không có `official_score` và không có A/B/C/D được phát hành.
 - Đây là vòng kiểm chứng quy trình, chưa phải xác nhận rằng dữ liệu nghiệp vụ đã đầy đủ.
+
+## Evidence Adjudication V1
+
+Workbook `tan-quang-evidence-adjudication-v1.xlsx` đã tạo 102 dòng ở cấp từng ô thiếu, với trạng thái ban đầu `PENDING_ADJUDICATION`. Không import workbook này làm nguồn nghiệp vụ; sau khi Kế toán/CSKH xác nhận, chỉ cập nhật hai sheet nguồn `01 Khach hang` và `02 Hop dong`, rồi mới chạy import lần 2.

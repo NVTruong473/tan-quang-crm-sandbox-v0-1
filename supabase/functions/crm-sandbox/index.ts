@@ -113,7 +113,8 @@ async function uploadImport(request: Request) {
   const uploaded: string[] = [];
   for (let index = 0; index < incoming.length; index += 1) {
     const file = incoming[index], path = `imports/${bundleHash.slice(0, 2)}/${bundleHash}/${fileHashes[index]}-${file.name}`;
-    const upload = await client.storage.from("crm-imports-private").upload(path, file.bytes, { contentType: file.type || (file.name.endsWith(".csv") ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"), upsert: false, cacheControl: "0" });
+    const safeType = file.name.endsWith(".csv") ? "text/csv" : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    const upload = await client.storage.from("crm-imports-private").upload(path, file.bytes, { contentType: safeType, upsert: false, cacheControl: "0" });
     if (upload.error) { await client.storage.from("crm-imports-private").remove(uploaded); return json(request, { error: "private_storage_write_failed" }, 500); }
     uploaded.push(path);
   }

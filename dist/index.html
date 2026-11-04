@@ -26,7 +26,7 @@
         <button type="submit">Đăng nhập CRM Sandbox</button>
         <p class="access-error" id="access-error" role="alert" aria-live="polite"></p>
       </form>
-      <div class="access-safety"><strong>Nội dung công khai</strong><span>Đây là bản sandbox dùng dữ liệu tổng hợp. Production Gate vẫn BLOCKED và không có dữ liệu khách hàng thật.</span></div>
+      <div class="access-safety"><strong>Nội dung công khai</strong><span>Đây là bản sandbox. Production Gate vẫn BLOCKED; dữ liệu CRM chỉ tải sau khi quản trị viên xác thực.</span></div>
     </div>
   </section>
   <div class="app-shell">
@@ -39,7 +39,7 @@
         <button class="nav-item" data-view="intake">Nhập & phát hành dữ liệu</button>
         <button class="nav-item" data-view="safety">Safety Gate</button>
       </nav>
-      <div class="release-card"><span>Dữ liệu đang xem</span><strong id="active-release">Bản thử nghiệm an toàn</strong><small id="active-release-status">Chỉ xem và kiểm tra</small><details class="technical-details"><summary>Thông tin kỹ thuật</summary><code id="active-release-code">v0.1-31ed10f5fde0 · READY_FOR_SANDBOX_ONLY</code></details></div>
+      <div class="release-card"><span>Dữ liệu đang xem</span><strong id="active-release">Customer + Contract V1</strong><small id="active-release-status">Sandbox · score gate khóa</small><details class="technical-details"><summary>Thông tin kỹ thuật</summary><code id="active-release-code">CUSTOMER_CONTRACT_V1 · OFFICIAL_SCORE_BLOCKED</code></details></div>
     </aside>
 
     <main>
@@ -142,8 +142,8 @@
       <section id="safety" class="view">
         <div class="safety-grid">
           <article class="panel"><p class="eyebrow">Production</p><h2>Gate vẫn khóa</h2><div class="status-block blocked">BLOCKED</div><p>11 quyết định nghiệp vụ chưa được phê duyệt. Không có nút hoặc luồng nào từ giao diện này ghi dữ liệu sang production.</p></article>
-          <article class="panel"><p class="eyebrow">Sandbox</p><h2>Phạm vi cho phép</h2><div class="status-block ready">READY_FOR_SANDBOX_ONLY</div><p>Dùng để kiểm thử UI, luồng dữ liệu, Customer 360, dashboard và scoring mô phỏng.</p></article>
-          <article class="panel span-2"><p class="eyebrow">Controls</p><h2>Ranh giới bắt buộc</h2><div class="control-grid"><div><strong>SYNTHETIC IDs</strong><span>Mọi customer_id bắt đầu bằng SYN-</span></div><div><strong>READ ONLY</strong><span>Không có thao tác tạo, sửa hoặc xóa</span></div><div><strong>SIMULATED SCORE</strong><span>Công thức chưa được phê duyệt nghiệp vụ</span></div><div><strong>ISOLATED RELEASE</strong><span>Nguồn duy nhất: v0.1-31ed10f5fde0</span></div></div></article>
+          <article class="panel"><p class="eyebrow">Sandbox</p><h2>Phạm vi cho phép</h2><div class="status-block ready">READY_FOR_SANDBOX_ONLY</div><p>Dùng để kiểm thử UI, luồng dữ liệu, Customer 360, dashboard và hàng đợi CSKH theo bằng chứng. Official Score vẫn bị khóa.</p></article>
+          <article class="panel span-2"><p class="eyebrow">Controls</p><h2>Ranh giới bắt buộc</h2><div class="control-grid"><div><strong>PRIVATE RELEASE</strong><span>Chỉ release đã kiểm tra mới được materialize; raw file nằm trong private storage.</span></div><div><strong>READ ONLY</strong><span>Dashboard không sửa dữ liệu nguồn; chỉnh sửa phải qua workbook rồi import lại.</span></div><div><strong>OFFICIAL SCORE BLOCKED</strong><span>Rule 100 điểm đã ghi nhận, nhưng xếp hạng chỉ mở khi Score Readiness Gate đạt.</span></div><div><strong>ISOLATED RELEASE</strong><span>Customer + Contract V1; Production Gate vẫn khóa.</span></div></div></article>
         </div>
       </section>
     </main>

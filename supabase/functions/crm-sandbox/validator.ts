@@ -84,8 +84,17 @@ function customerContractProfile(sources: Map<string, Array<Record<string, strin
     byCustomer.set(customerId, current); validContracts += 1;
   }
   const customer360 = customers.map((row) => { const id = field(row, "ma_kh"), history = byCustomer.get(id) ?? { count: 0, revenue: 0, profit: 0, outstanding: 0, incompleteCost: 0 }; const evidence = history.count === 0 ? "NEEDS_CONTRACT_EVIDENCE" : history.incompleteCost > 0 ? "REVIEW_COST_EVIDENCE" : "CONTRACT_HISTORY_PRESENT"; return { customer_id: id, customer_name: field(row, "ten_cong_ty"), revenue: String(history.revenue), gross_profit: String(history.profit), outstanding: String(history.outstanding), weighted_pipeline: "", contract_count: String(history.count), orphan_contract_count: String(orphanContracts), evidence_status: evidence, priority_reason: evidence === "NEEDS_CONTRACT_EVIDENCE" ? "Chưa có hợp đồng liên kết; cần bổ sung bằng chứng trước khi xếp tiềm năng." : "Có lịch sử hợp đồng đã liên kết; ưu tiên kiểm tra CSKH theo dữ liệu hợp đồng." }; });
-  const triage = customer360.map((row) => ({ customer_id: row.customer_id, total_score: row.contract_count, segment: row.evidence_status, priority_reason: row.priority_reason }));
-  return { tables: { customer_360: customer360, scoring_sandbox: triage, opportunities: [], crm_activities: [] }, record_counts: { customer_360: customer360.length, scoring_sandbox: triage.length, opportunities: 0, crm_activities: 0 }, report: { validator_version: "CUSTOMER_CONTRACT_WORKBOOK_ADAPTER_V1", contract_version: "TAN_QUANG_CUSTOMER_CONTRACT_V1", source_profile: "CUSTOMER_CONTRACT", customers: customer360.length, linked_contracts: validContracts, quarantined_orphan_contracts: orphanContracts, unavailable_domains: ["sales_pipeline", "crm_activities", "approved_potential_score"], result: "VALIDATED_WITH_LIMITATIONS" } };
+  const triage = customer360.map((row) => ({
+    customer_id: row.customer_id,
+    total_score: row.contract_count,
+    segment: row.evidence_status,
+    official_score: "",
+    score_status: "NOT_READY",
+    coverage_pct: "",
+    priority_reason: row.priority_reason,
+    cskh_action: row.evidence_status === "NEEDS_CONTRACT_EVIDENCE" ? "Thu thập bằng chứng hợp đồng trước khi xếp hạng" : row.evidence_status === "REVIEW_COST_EVIDENCE" ? "Xác nhận giá vốn/công nợ trước khi đánh giá lợi nhuận" : "Phân công CSKH rà soát nhu cầu và khả năng tái ký",
+  }));
+  return { tables: { customer_360: customer360, scoring_sandbox: triage, opportunities: [], crm_activities: [] }, record_counts: { customer_360: customer360.length, scoring_sandbox: triage.length, opportunities: 0, crm_activities: 0 }, report: { validator_version: "CUSTOMER_CONTRACT_WORKBOOK_ADAPTER_V1", contract_version: "TAN_QUANG_CUSTOMER_CONTRACT_V1", source_profile: "CUSTOMER_CONTRACT", customers: customer360.length, linked_contracts: validContracts, quarantined_orphan_contracts: orphanContracts, scorecard: { rule_version: "BOSS_RULE_100_V1", official_scoring: "BLOCKED", reason: "MISSING_REQUIRED_DOMAINS", cskh_triage: "EVIDENCE_ONLY" }, unavailable_domains: ["sales_pipeline", "crm_activities", "approved_potential_score"], result: "VALIDATED_WITH_LIMITATIONS" } };
 }
 export async function validateAndMaterialize(files: InputFile[]): Promise<Materialization> {
   if (!files.length || files.length > 4) throw new Error("FILE_COUNT_INVALID"); const total = files.reduce((n, file) => n + file.bytes.byteLength, 0); if (total > MAX_SOURCE_BYTES) throw new Error("SOURCE_SIZE_EXCEEDS_8MB_VALIDATION_LIMIT"); const workbook = files.filter((f) => /\.xlsx$/i.test(f.name)); if (workbook.length > 1 || (workbook.length && files.length !== 1) || files.some((f) => !/\.(xlsx|csv)$/i.test(f.name))) throw new Error("INPUT_COMBINATION_INVALID");

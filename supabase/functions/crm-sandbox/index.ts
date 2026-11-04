@@ -203,7 +203,7 @@ Deno.serve(async (request: Request) => {
   if (request.method !== "GET") return json(request, { error: "method_not_allowed" }, 405);
 
   if (path === "/health") {
-    return json(request, { status: "ok", release: "v0.1-31ed10f5fde0", production_gate: "BLOCKED", data_origin: "SYNTHETIC", auth: "supabase_admin_required" });
+    return json(request, { status: "ok", release: "CUSTOMER_CONTRACT_V1", production_gate: "BLOCKED", data_origin: "SOURCE_WORKBOOK", official_score: "BLOCKED_BY_SCORE_READINESS_GATE", auth: "supabase_admin_required" });
   }
 
   if (!(dataKey in DATA_FILES)) return json(request, { error: "not_found" }, 404);

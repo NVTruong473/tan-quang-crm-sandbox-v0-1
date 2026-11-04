@@ -33,10 +33,8 @@
     <aside class="sidebar">
       <div class="brand"><span class="brand-mark">TQ</span><div><strong>Tân Quang</strong><small>CRM Sandbox V0.1</small></div></div>
       <nav aria-label="Điều hướng chính">
-        <button class="nav-item active" data-view="overview">Tổng quan</button>
-        <button class="nav-item" data-view="customers">Khách hàng</button>
-        <button class="nav-item" data-view="opportunities">Cơ hội</button>
-        <button class="nav-item" data-view="activities">Hoạt động</button>
+        <button class="nav-item active" data-view="overview">Ưu tiên CSKH</button>
+        <button class="nav-item" data-view="customers">Danh sách khách hàng</button>
         <button class="nav-item" data-view="intake">Nhập & phát hành dữ liệu</button>
         <button class="nav-item" data-view="safety">Safety Gate</button>
       </nav>
@@ -48,21 +46,21 @@
         <div><p class="eyebrow">Customer intelligence workspace</p><h1 id="page-title">Tổng quan CRM</h1></div>
         <div class="topbar-actions"><button id="logout-button" class="logout-button" type="button">Đăng xuất</button><div class="gate-pill"><span class="dot"></span>Production BLOCKED</div></div>
       </header>
-      <div class="warning" role="alert"><div><strong>BẢN THỬ NGHIỆM</strong><span>Chỉ dùng để xem giao diện và kiểm tra luồng dữ liệu; chưa phải cơ sở ra quyết định kinh doanh.</span></div><details class="technical-details"><summary>Thông tin kỹ thuật</summary><code>environment=SANDBOX · data_origin=SYNTHETIC · business_approved=FALSE</code></details></div>
+      <div class="warning" role="alert"><div><strong>ƯU TIÊN THEO BẰNG CHỨNG</strong><span>Chỉ xếp khách có dữ liệu hợp đồng liên kết. Khách thiếu lịch sử được đưa vào danh sách bổ sung dữ liệu, không bị chấm thấp.</span></div><details class="technical-details"><summary>Thông tin kỹ thuật</summary><code>environment=SANDBOX · profile=CUSTOMER_CONTRACT · business_approved=FALSE</code></details></div>
 
       <section id="overview" class="view active">
         <div class="kpi-grid" id="kpi-grid"></div>
         <div class="content-grid">
-          <article class="panel span-2"><div class="panel-head"><div><p class="eyebrow">Customer 360</p><h2>Khách hàng theo doanh thu mô phỏng</h2></div><button class="text-button" data-go="customers">Xem tất cả</button></div><div id="revenue-bars" class="bars"></div></article>
-          <article class="panel"><div class="panel-head"><div><p class="eyebrow">Scoring</p><h2>Phân nhóm mô phỏng</h2></div></div><div id="segment-ring" class="ring-wrap"></div></article>
-          <article class="panel span-2"><div class="panel-head"><div><p class="eyebrow">Accounts</p><h2>Cần chú ý trong sandbox</h2></div></div><div id="attention-list" class="account-list"></div></article>
-          <article class="panel"><div class="panel-head"><div><p class="eyebrow">Pipeline</p><h2>Cơ hội đang mở</h2></div></div><div id="pipeline-summary" class="pipeline-summary"></div></article>
+          <article class="panel span-2"><div class="panel-head"><div><p class="eyebrow">Customer + Contract</p><h2>Khách hàng theo doanh thu hợp đồng</h2></div><button class="text-button" data-go="customers">Xem tất cả</button></div><div id="revenue-bars" class="bars"></div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">Evidence</p><h2>Mức độ đủ bằng chứng</h2></div></div><div id="segment-ring" class="ring-wrap"></div></article>
+          <article class="panel span-2"><div class="panel-head"><div><p class="eyebrow">CSKH</p><h2>Ưu tiên xử lý hôm nay</h2></div></div><div id="attention-list" class="account-list"></div></article>
+          <article class="panel"><div class="panel-head"><div><p class="eyebrow">Data quality</p><h2>Phạm vi dữ liệu hiện có</h2></div></div><div id="pipeline-summary" class="pipeline-summary"></div></article>
         </div>
       </section>
 
       <section id="customers" class="view">
         <div class="toolbar"><label class="search"><span>Tìm kiếm</span><input id="customer-search" type="search" placeholder="Tên hoặc mã khách hàng"></label><label><span>Phân nhóm</span><select id="segment-filter"><option value="ALL">Tất cả</option><option>A</option><option>B</option><option>C</option><option>D</option></select></label></div>
-        <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Khách hàng</th><th>Doanh thu</th><th>Lợi nhuận</th><th>Công nợ</th><th>Pipeline</th><th>Điểm</th><th>Nhóm</th></tr></thead><tbody id="customer-table"></tbody></table></div></div>
+        <div class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Khách hàng</th><th>Doanh thu hợp đồng</th><th>Lợi nhuận đã xác nhận</th><th>Công nợ</th><th>Số hợp đồng</th><th>Trạng thái bằng chứng</th><th>Hành động CSKH</th></tr></thead><tbody id="customer-table"></tbody></table></div></div>
       </section>
 
       <section id="opportunities" class="view">

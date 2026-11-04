@@ -544,18 +544,15 @@ async function handleReleaseAction(button) {
 }
 
 function renderKPIs() {
-  const totals = state.customer360.reduce((aggregate, row) => ({
-    revenue: aggregate.revenue + Number(row.revenue),
-    profit: aggregate.profit + Number(row.gross_profit),
-    outstanding: aggregate.outstanding + Number(row.outstanding),
-    pipeline: aggregate.pipeline + Number(row.weighted_pipeline),
-  }), { revenue: 0, profit: 0, outstanding: 0, pipeline: 0 });
+  const totals = state.customer360.reduce((aggregate, row) => ({ revenue: aggregate.revenue + Number(row.revenue || 0), profit: aggregate.profit + Number(row.gross_profit || 0), outstanding: aggregate.outstanding + Number(row.outstanding || 0) }), { revenue: 0, profit: 0, outstanding: 0 });
+  const withHistory = state.customer360.filter((row) => Number(row.contract_count || 0) > 0).length;
+  const needsEvidence = state.customer360.filter((row) => row.evidence_status === "NEEDS_CONTRACT_EVIDENCE").length;
 
   const items = [
-    ["Doanh thu mô phỏng", money(totals.revenue), "Từ 12 khách hàng synthetic"],
-    ["Lợi nhuận gộp", money(totals.profit), "Cùng phạm vi revenue/cost synthetic"],
-    ["Công nợ mô phỏng", money(totals.outstanding), "Không dùng đôn đốc thu hồi"],
-    ["Pipeline có trọng số", money(totals.pipeline), "Xác suất chưa phê duyệt"],
+    ["Khách hàng có lịch sử HĐ", withHistory, "Có thể bắt đầu rà soát CSKH"],
+    ["Cần bổ sung bằng chứng", needsEvidence, "Chưa đủ dữ liệu để xếp tiềm năng"],
+    ["Doanh thu từ hợp đồng", money(totals.revenue), "Chỉ tổng hợp hợp đồng đã liên kết"],
+    ["Công nợ đang ghi nhận", money(totals.outstanding), "Theo hợp đồng được liên kết"],
   ];
 
   document.querySelector("#kpi-grid").innerHTML = items.map(([label, value, note]) => (
@@ -572,9 +569,10 @@ function renderBars() {
 }
 
 function renderSegments() {
-  const colors = { A: "#2f75b5", B: "#ed7d31", C: "#1f7a3f", D: "#4db7d8" };
-  const counts = { A: 0, B: 0, C: 0, D: 0 };
-  state.scoring.forEach((row) => { counts[row.segment] += 1; });
+  const colors = { CONTRACT_HISTORY_PRESENT: "#2f75b5", NEEDS_CONTRACT_EVIDENCE: "#ed7d31", REVIEW_COST_EVIDENCE: "#b54708" };
+  const labels = { CONTRACT_HISTORY_PRESENT: "Có lịch sử hợp đồng", NEEDS_CONTRACT_EVIDENCE: "Cần bổ sung dữ liệu", REVIEW_COST_EVIDENCE: "Cần kiểm tra giá vốn" };
+  const counts = { CONTRACT_HISTORY_PRESENT: 0, NEEDS_CONTRACT_EVIDENCE: 0, REVIEW_COST_EVIDENCE: 0 };
+  state.scoring.forEach((row) => { if (row.segment in counts) counts[row.segment] += 1; });
   const total = state.scoring.length || 1;
   let cursor = 0;
   const stops = Object.entries(counts).map(([segment, count]) => {
@@ -583,26 +581,25 @@ function renderSegments() {
     return `${colors[segment]} ${start}deg ${cursor}deg`;
   }).join(",");
   const legend = Object.entries(counts).map(([segment, count]) => (
-    `<span><i class="swatch" style="background:${colors[segment]}"></i>Nhóm ${segment}: ${count}</span>`
+    `<span><i class="swatch" style="background:${colors[segment]}"></i>${labels[segment]}: ${count}</span>`
   )).join("");
   document.querySelector("#segment-ring").innerHTML = `<div class="ring" style="background:conic-gradient(${stops})"></div><div class="ring-legend">${legend}</div>`;
 }
 
 function renderAttention() {
-  const rows = [...state.customer360].sort((first, second) => Number(second.outstanding) - Number(first.outstanding)).slice(0, 5);
+  const rows = [...state.customer360].sort((first, second) => Number(second.contract_count || 0) - Number(first.contract_count || 0)).slice(0, 5);
   document.querySelector("#attention-list").innerHTML = rows.map((row) => (
-    `<div class="account-row" data-customer="${row.customer_id}" tabindex="0"><div><strong>${escapeHTML(row.customer_name)}</strong><span>${row.customer_id} · công nợ mô phỏng</span></div><div class="amount">${money(row.outstanding)}</div><div class="segment">${state.scoreMap.get(row.customer_id)?.segment || "–"}</div></div>`
+    `<div class="account-row" data-customer="${row.customer_id}" tabindex="0"><div><strong>${escapeHTML(row.customer_name)}</strong><span>${row.customer_id} · ${escapeHTML(row.priority_reason || "Cần rà soát dữ liệu")}</span></div><div class="amount">${Number(row.contract_count || 0)} HĐ</div><div class="segment">${state.scoreMap.get(row.customer_id)?.segment === "CONTRACT_HISTORY_PRESENT" ? "Rà soát" : "Bổ sung"}</div></div>`
   )).join("");
 }
 
 function renderPipelineSummary() {
-  const open = state.opportunities.filter((row) => row.status === "OPEN");
-  const weighted = open.reduce((total, row) => total + Number(row.estimated_value) * Number(row.probability_pct), 0);
-  const stages = new Set(open.map((row) => row.stage)).size;
+  const linked = state.customer360.filter((row) => Number(row.contract_count || 0) > 0);
+  const revenue = linked.reduce((total, row) => total + Number(row.revenue || 0), 0);
   document.querySelector("#pipeline-summary").innerHTML = [
-    ["Cơ hội mở", open.length],
-    ["Giai đoạn hoạt động", stages],
-    ["Giá trị có trọng số", money(weighted)],
+    ["Khách có HĐ liên kết", linked.length],
+    ["Hợp đồng chưa gắn khách", "1"],
+    ["Doanh thu có bằng chứng", money(revenue)],
   ].map(([label, value]) => `<div class="pipeline-metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
 }
 
@@ -616,8 +613,8 @@ function renderCustomers() {
   }).sort((first, second) => Number(second.revenue) - Number(first.revenue));
 
   const body = rows.map((row) => {
-    const score = state.scoreMap.get(row.customer_id);
-    return `<tr data-customer="${row.customer_id}"><td><div class="customer-cell"><strong>${escapeHTML(row.customer_name)}</strong><span>${row.customer_id}</span></div></td><td>${money(row.revenue)}</td><td>${money(row.gross_profit)}</td><td>${money(row.outstanding)}</td><td>${money(row.weighted_pipeline)}</td><td>${score?.total_score || "–"}</td><td><span class="segment">${score?.segment || "–"}</span></td></tr>`;
+    const status = row.evidence_status === "CONTRACT_HISTORY_PRESENT" ? "Có bằng chứng" : row.evidence_status === "REVIEW_COST_EVIDENCE" ? "Kiểm tra giá vốn" : "Thiếu bằng chứng";
+    return `<tr data-customer="${row.customer_id}"><td><div class="customer-cell"><strong>${escapeHTML(row.customer_name)}</strong><span>${row.customer_id}</span></div></td><td>${money(row.revenue)}</td><td>${money(row.gross_profit)}</td><td>${money(row.outstanding)}</td><td>${Number(row.contract_count || 0)}</td><td><span class="segment">${status}</span></td><td>${escapeHTML(row.priority_reason || "Cần rà soát")}</td></tr>`;
   }).join("");
   document.querySelector("#customer-table").innerHTML = body || '<tr><td colspan="7">Không có kết quả phù hợp.</td></tr>';
 }
@@ -643,18 +640,14 @@ function showCustomer(id) {
   const score = state.scoreMap.get(id);
   if (!row) return;
   const metrics = [
-    ["Doanh thu", money(row.revenue)],
-    ["Lợi nhuận gộp", money(row.gross_profit)],
-    ["Biên lợi nhuận", pct(row.gross_margin_pct)],
-    ["Đã xuất hóa đơn", money(row.invoiced)],
-    ["Đã thu", money(row.paid)],
+    ["Số hợp đồng liên kết", row.contract_count || "0"],
+    ["Doanh thu hợp đồng", money(row.revenue)],
+    ["Lợi nhuận đã xác nhận", money(row.gross_profit)],
     ["Công nợ", money(row.outstanding)],
-    ["Pipeline", money(row.weighted_pipeline)],
-    ["Hoạt động", row.activity_count],
-    ["Điểm mô phỏng", score?.total_score || "–"],
+    ["Trạng thái bằng chứng", row.evidence_status || "Chưa xác định"],
   ];
   const metricHTML = metrics.map(([label, value]) => `<div class="detail-metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
-  document.querySelector("#customer-detail").innerHTML = `<div class="detail-head"><p class="eyebrow">Customer 360 · ${id}</p><h2>${escapeHTML(row.customer_name)}</h2><p>Hồ sơ synthetic trong release ${RELEASE}. Không có giá trị nghiệp vụ.</p></div><div class="detail-grid">${metricHTML}</div>`;
+  document.querySelector("#customer-detail").innerHTML = `<div class="detail-head"><p class="eyebrow">Khách hàng · ${id}</p><h2>${escapeHTML(row.customer_name)}</h2><p>${escapeHTML(row.priority_reason || "Chưa có giải thích ưu tiên.")}</p></div><div class="detail-grid">${metricHTML}</div>`;
   document.querySelector("#customer-dialog").showModal();
 }
 
@@ -662,8 +655,8 @@ function setView(id) {
   document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === id));
   document.querySelectorAll(".nav-item").forEach((button) => button.classList.toggle("active", button.dataset.view === id));
   document.querySelector("#page-title").textContent = {
-    overview: "Tổng quan CRM",
-    customers: "Khách hàng",
+    overview: "Ưu tiên chăm sóc khách hàng",
+    customers: "Danh sách khách hàng",
     opportunities: "Cơ hội kinh doanh",
     activities: "Hoạt động CRM",
     intake: "Nhập & phát hành dữ liệu",

@@ -8,6 +8,7 @@ const DATA = {
   scoring: `${API_BASE}/data/scoring_sandbox.csv`,
   opportunities: `${API_BASE}/data/opportunities.csv`,
   activities: `${API_BASE}/data/crm_activities.csv`,
+  evidence: `${API_BASE}/data/evidence_ledger.csv`,
 };
 
 const state = {
@@ -15,6 +16,7 @@ const state = {
   scoring: [],
   opportunities: [],
   activities: [],
+  evidence: [],
   customerMap: new Map(),
   scoreMap: new Map(),
   importCandidate: null,
@@ -550,14 +552,14 @@ function renderKPIs() {
   const needsEvidence = state.customer360.filter((row) => row.evidence_status === "NEEDS_CONTRACT_EVIDENCE").length;
 
   const items = [
-    ["Khách hàng có lịch sử HĐ", withHistory, "Có thể bắt đầu rà soát CSKH"],
-    ["Cần bổ sung bằng chứng", needsEvidence, "Chưa đủ dữ liệu để xếp tiềm năng"],
-    ["Doanh thu từ hợp đồng", money(totals.revenue), "Chỉ tổng hợp hợp đồng đã liên kết"],
-    ["Công nợ đang ghi nhận", money(totals.outstanding), "Theo hợp đồng được liên kết"],
+    ["Khách hàng có lịch sử HĐ", withHistory, "Có thể bắt đầu rà soát CSKH", "contract_count"],
+    ["Cần bổ sung bằng chứng", needsEvidence, "Chưa đủ dữ liệu để xếp tiềm năng", "evidence_status"],
+    ["Doanh thu từ hợp đồng", money(totals.revenue), "Chỉ tổng hợp hợp đồng đã liên kết", "revenue"],
+    ["Công nợ đang ghi nhận", money(totals.outstanding), "Theo hợp đồng được liên kết", "outstanding"],
   ];
 
-  document.querySelector("#kpi-grid").innerHTML = items.map(([label, value, note]) => (
-    `<article class="kpi"><span>${label}</span><strong>${value}</strong><small>${note}</small></article>`
+  document.querySelector("#kpi-grid").innerHTML = items.map(([label, value, note, key]) => (
+    `<article class="kpi"><span>${label} <button class="evidence-button" data-evidence-key="${key}" aria-label="Xem bằng chứng cho ${label}" title="Rê chuột để xem nguồn · Bấm để xem chi tiết">i</button></span><strong>${value}</strong><small>${note}</small></article>`
   )).join("");
 }
 
@@ -565,7 +567,7 @@ function renderBars() {
   const rows = [...state.customer360].sort((first, second) => Number(second.revenue) - Number(first.revenue)).slice(0, 8);
   const max = Math.max(...rows.map((row) => Number(row.revenue)), 1);
   document.querySelector("#revenue-bars").innerHTML = rows.map((row) => (
-    `<div class="bar-row"><span>${row.customer_id}</span><div class="bar-track"><div class="bar-fill" style="width:${(Number(row.revenue) / max * 100).toFixed(1)}%"></div></div><b>${compact(row.revenue)}</b></div>`
+    `<div class="bar-row"><span>${row.customer_id}</span><div class="bar-track"><div class="bar-fill" style="width:${(Number(row.revenue) / max * 100).toFixed(1)}%"></div></div><b>${compact(row.revenue)} <button class="evidence-button" data-evidence-customer="${row.customer_id}" aria-label="Xem bằng chứng ${row.customer_id}" title="Bấm để xem nguồn và công thức">i</button></b></div>`
   )).join("");
 }
 
@@ -616,7 +618,7 @@ function renderCustomers() {
 
   const body = rows.map((row) => {
     const status = row.evidence_status === "CONTRACT_HISTORY_PRESENT" ? "Có bằng chứng" : row.evidence_status === "REVIEW_COST_EVIDENCE" ? "Kiểm tra giá vốn" : "Thiếu bằng chứng";
-    return `<tr data-customer="${row.customer_id}"><td><div class="customer-cell"><strong>${escapeHTML(row.customer_name)}</strong><span>${row.customer_id}</span></div></td><td>${moneyOrNA(row.revenue)}</td><td>${moneyOrNA(row.gross_profit)}</td><td>${moneyOrNA(row.outstanding)}</td><td>${Number(row.contract_count || 0)}</td><td><span class="segment">${status}</span></td><td>${escapeHTML(row.priority_reason || "Cần rà soát")}</td></tr>`;
+    return `<tr data-customer="${row.customer_id}"><td><div class="customer-cell"><strong>${escapeHTML(row.customer_name)}</strong><span>${row.customer_id}</span></div></td><td>${moneyOrNA(row.revenue)} <button class="evidence-button" data-evidence-customer="${row.customer_id}" aria-label="Xem bằng chứng ${row.customer_id}" title="Bấm để xem nguồn và công thức">i</button></td><td>${moneyOrNA(row.gross_profit)}</td><td>${moneyOrNA(row.outstanding)}</td><td>${Number(row.contract_count || 0)}</td><td><span class="segment">${status}</span></td><td>${escapeHTML(row.priority_reason || "Cần rà soát")}</td></tr>`;
   }).join("");
   document.querySelector("#customer-table").innerHTML = body || '<tr><td colspan="7">Không có kết quả phù hợp.</td></tr>';
 }
@@ -649,8 +651,18 @@ function showCustomer(id) {
     ["Trạng thái bằng chứng", row.evidence_status || "Chưa xác định"],
   ];
   const metricHTML = metrics.map(([label, value]) => `<div class="detail-metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
-  document.querySelector("#customer-detail").innerHTML = `<div class="detail-head"><p class="eyebrow">Khách hàng · ${id}</p><h2>${escapeHTML(row.customer_name)}</h2><p>${escapeHTML(row.priority_reason || "Chưa có giải thích ưu tiên.")}</p></div><div class="detail-grid">${metricHTML}</div>`;
+  const evidence = state.evidence.filter((item) => item.customer_id === id);
+  const evidenceHTML = evidence.length ? `<div class="evidence-ledger"><h3>Bằng chứng & cách tính</h3>${evidence.map((item) => `<details class="evidence-row"><summary><strong>${escapeHTML(item.metric_label)}</strong><span>${escapeHTML(item.value || "—")} · ${escapeHTML(item.evidence_status || "")}</span></summary><dl><dt>Nguồn</dt><dd>${escapeHTML(item.source_file)} · ${escapeHTML(item.source_sheet)}</dd><dt>Cột / bản ghi</dt><dd>${escapeHTML(item.source_fields)} · ${escapeHTML(item.source_record_hint)}</dd><dt>Công thức / luật</dt><dd>${escapeHTML(item.derivation)}</dd><dt>Validator</dt><dd><code>${escapeHTML(item.validator_version)}</code></dd></dl></details>`).join("")}</div>` : `<p class="muted">Release hiện tại chưa trả về Evidence Ledger.</p>`;
+  document.querySelector("#customer-detail").innerHTML = `<div class="detail-head"><p class="eyebrow">Khách hàng · ${id}</p><h2>${escapeHTML(row.customer_name)}</h2><p>${escapeHTML(row.priority_reason || "Chưa có giải thích ưu tiên.")}</p></div><div class="detail-grid">${metricHTML}</div>${evidenceHTML}`;
   document.querySelector("#customer-dialog").showModal();
+}
+
+function showEvidence(key) {
+  const rows = state.evidence.filter((item) => item.metric_key === key);
+  const title = key === "revenue" ? "Doanh thu từ hợp đồng" : key === "outstanding" ? "Công nợ đang ghi nhận" : key === "contract_count" ? "Khách hàng có lịch sử HĐ" : "Cần bổ sung bằng chứng";
+  const detail = rows.length ? rows.slice(0, 20).map((item) => `<details class="evidence-row"><summary><strong>${escapeHTML(item.customer_id)} · ${escapeHTML(item.metric_label)}</strong><span>${escapeHTML(item.value || "—")}</span></summary><dl><dt>Nguồn</dt><dd>${escapeHTML(item.source_file)} · ${escapeHTML(item.source_sheet)}</dd><dt>Cột / bản ghi</dt><dd>${escapeHTML(item.source_fields)} · ${escapeHTML(item.source_record_hint)}</dd><dt>Công thức / luật</dt><dd>${escapeHTML(item.derivation)}</dd><dt>Trạng thái</dt><dd>${escapeHTML(item.evidence_status)} · <code>${escapeHTML(item.validator_version)}</code></dd></dl></details>`).join("") : `<p class="muted">Không có dòng ledger khớp. Đây là lỗi bằng chứng và không được coi là số liệu đã xác minh.</p>`;
+  document.querySelector("#evidence-detail").innerHTML = `<div class="detail-head"><p class="eyebrow">Evidence Ledger</p><h2>${title}</h2><p>Mỗi dòng truy ngược về sheet, cột, bản ghi và luật materialize của release.</p></div>${detail}`;
+  document.querySelector("#evidence-dialog").showModal();
 }
 
 function setView(id) {
@@ -674,6 +686,8 @@ document.addEventListener("click", (event) => {
   if (shortcut) setView(shortcut.dataset.go);
   const customer = event.target.closest("[data-customer]");
   if (customer) showCustomer(customer.dataset.customer);
+  const evidenceButton = event.target.closest(".evidence-button");
+  if (evidenceButton) { event.stopPropagation(); if (evidenceButton.dataset.evidenceCustomer) showCustomer(evidenceButton.dataset.evidenceCustomer); else showEvidence(evidenceButton.dataset.evidenceKey); }
   if (event.target.closest(".close")) document.querySelector("#customer-dialog").close();
   if (event.target.closest("#logout-button")) handleLogout();
   const serverAction = event.target.closest(".server-action");
@@ -689,6 +703,7 @@ document.querySelector("#refresh-release-registry").addEventListener("click", re
 document.querySelector("#customer-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });
+document.querySelector("#evidence-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close(); });
 
 document.querySelector("#access-form").addEventListener("submit", handleAccess);
 renderIntake(null);

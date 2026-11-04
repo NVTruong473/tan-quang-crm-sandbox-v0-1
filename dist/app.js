@@ -400,11 +400,13 @@ function renderIntake(candidate) {
   const summary = document.querySelector("#intake-summary");
   const fingerprintLabel = document.querySelector("#intake-fingerprint");
   const preview = document.querySelector("#preview-release");
+  const persist = document.querySelector("#persist-import");
   if (!candidate) {
     body.innerHTML = "";
     summary.textContent = "Chọn file để xem sheet, cột nhận diện, bản ghi và các lỗi chặn phát hành.";
     fingerprintLabel.textContent = "Chưa có fingerprint";
     preview.disabled = true;
+    persist.disabled = true;
     return;
   }
   const rows = contractRows(candidate);
@@ -416,6 +418,7 @@ function renderIntake(candidate) {
     : `<strong>Chưa thể phát hành.</strong> Cần đủ 4 bảng theo Data Contract, có đủ cột tối thiểu và ít nhất một bản ghi mỗi bảng.${extras}`;
   fingerprintLabel.textContent = `SHA-256: ${candidate.hash.slice(0, 12)}…`;
   preview.disabled = !ready;
+  persist.disabled = !ready || candidate.files.length !== 1;
 }
 
 function setIntakeStatus(message, kind = "neutral") {
@@ -480,6 +483,34 @@ function loadPreviewRelease() {
   renderAll();
   setIntakeStatus("Đã nạp bản xem trước cục bộ. Dashboard đã đổi theo input này; tải lại trang để quay về release đã phát hành.", "ready");
   setView("overview");
+}
+
+async function persistImport() {
+  const candidate = state.importCandidate;
+  const button = document.querySelector("#persist-import");
+  if (!candidate || candidate.files.length !== 1 || !contractRows(candidate).every((row) => row.status === "READY")) return;
+  let session = await activeSession();
+  if (!session) { setIntakeStatus("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi lưu file.", "blocked"); return; }
+  button.disabled = true;
+  setIntakeStatus("Đang lưu file vào kho riêng tư và tạo phiên xét duyệt…", "working");
+  try {
+    let response = await fetch(`${API_BASE}/imports`, {
+      method: "POST",
+      headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}`, "content-type": candidate.files[0].type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-file-name": encodeURIComponent(candidate.files[0].name) },
+      body: candidate.files[0],
+    });
+    if (response.status === 401) {
+      session = await refreshSession(session);
+      if (session) response = await fetch(`${API_BASE}/imports`, { method: "POST", headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}`, "content-type": candidate.files[0].type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-file-name": encodeURIComponent(candidate.files[0].name) }, body: candidate.files[0] });
+    }
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || "Không thể lưu phiên nhập.");
+    setIntakeStatus(result.duplicate ? "File này đã có fingerprint trùng. Hệ thống giữ nguyên phiên bản cũ, không tạo bản sao." : `Đã lưu riêng tư phiên ${String(result.id).slice(0, 8)}…; trạng thái: chờ kiểm tra server và xét duyệt. Dashboard chưa thay đổi.`, "ready");
+  } catch (error) {
+    setIntakeStatus(error.message || "Không thể lưu file.", "blocked");
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function renderKPIs() {
@@ -625,6 +656,7 @@ document.querySelector("#customer-search").addEventListener("input", renderCusto
 document.querySelector("#segment-filter").addEventListener("change", renderCustomers);
 document.querySelector("#import-files").addEventListener("change", handleImportFiles);
 document.querySelector("#preview-release").addEventListener("click", loadPreviewRelease);
+document.querySelector("#persist-import").addEventListener("click", persistImport);
 document.querySelector("#customer-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });

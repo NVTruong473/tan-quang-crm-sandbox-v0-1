@@ -327,6 +327,12 @@ async function load() {
   }
 
   Object.assign(state, Object.fromEntries(entries));
+  try {
+    const activityResponse = await serverRequest("/activities");
+    state.activityLedger = activityResponse.data || [];
+  } catch {
+    state.activityLedger = [];
+  }
   state.scoreMap = new Map(state.scoring.map((row) => [row.customer_id, row]));
   state.customerMap = new Map(state.customer360.map((row) => [row.customer_id, row]));
   renderAll();
@@ -654,10 +660,47 @@ function renderTriage() {
   const queueBody = document.querySelector("#work-queue-table");
   const activityBody = document.querySelector("#activity-ledger-table");
   if (!triageBody || !unattributedBody) return;
+  const taskSelect = document.querySelector("#activity-task-id");
+  if (taskSelect && !taskSelect.dataset.ready) {
+    taskSelect.innerHTML = '<option value="">Chọn task CSKH</option>' + state.workQueue.map((row) => `<option value="${escapeHTML(row.task_id)}">${escapeHTML(row.task_id)} · ${escapeHTML(row.customer_id)} · ${escapeHTML(row.queue)}</option>`).join("");
+    taskSelect.dataset.ready = "true";
+  }
   if (queueBody) queueBody.innerHTML = state.workQueue.map((row) => `<tr><td><code>${escapeHTML(row.task_id)}</code></td><td>${escapeHTML(row.customer_id)}</td><td><span class="segment">${escapeHTML(row.priority)}</span></td><td>${escapeHTML(row.queue)}</td><td>${escapeHTML(row.owner)}</td><td>${escapeHTML(row.due_date)}</td><td>${escapeHTML(row.task_status)}</td><td>${escapeHTML(row.action_required)}</td></tr>`).join("") || '<tr><td colspan="8">Chưa có task CSKH.</td></tr>';
   if (activityBody) activityBody.innerHTML = state.activityLedger.length ? state.activityLedger.map((row) => `<tr><td>${escapeHTML(row.activity_id)}</td><td>${escapeHTML(row.task_id)}</td><td>${escapeHTML(row.customer_id)}</td><td>${escapeHTML(row.activity_date)}</td><td>${escapeHTML(row.activity_type)}</td><td>${escapeHTML(row.contact_outcome)}</td><td>${escapeHTML(row.next_action)}</td><td>${escapeHTML(row.activity_status)}</td></tr>`).join("") : '<tr><td colspan="8">Chưa có hoạt động được xác nhận.</td></tr>';
   triageBody.innerHTML = state.triage.map((row) => `<tr data-customer="${escapeHTML(row.customer_id)}"><td><strong>${escapeHTML(row.customer_id)}</strong><br><small>${escapeHTML(row.customer_name)}</small></td><td><span class="segment">${escapeHTML(row.triage_priority)}</span></td><td>${escapeHTML(row.triage_queue)}</td><td>${moneyOrNA(row.verified_revenue)}</td><td>${moneyOrNA(row.outstanding)}</td><td>${escapeHTML(row.evidence_status)}</td><td>${escapeHTML(row.cskh_action)}</td></tr>`).join("") || '<tr><td colspan="7">Không có hàng đợi CSKH.</td></tr>';
   unattributedBody.innerHTML = state.unattributed.slice(0, 200).map((row) => `<tr><td><code>${escapeHTML(row.unattributed_id)}</code></td><td>${escapeHTML(row.source_row)}</td><td>${escapeHTML(row.contract_id || "—")}</td><td>${moneyOrNA(row.contract_value)}</td><td>${moneyOrNA(row.recognized_revenue)}</td><td><span class="segment">${escapeHTML(row.issue_code)}</span></td><td>${escapeHTML(row.disposition)}</td></tr>`).join("") || '<tr><td colspan="7">Không có hợp đồng chưa định danh.</td></tr>';
+}
+
+async function submitActivity(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const button = form.querySelector("button[type=submit]");
+  const status = document.querySelector("#activity-capture-status");
+  const data = Object.fromEntries(new FormData(form).entries());
+  const task = state.workQueue.find((row) => row.task_id === data.task_id);
+  if (!task) {
+    status.textContent = "Chưa chọn task CSKH hợp lệ.";
+    status.className = "intake-status blocked";
+    return;
+  }
+  data.customer_id = task.customer_id;
+  button.disabled = true;
+  status.textContent = "Đang ghi vào Activity Outcome Ledger…";
+  status.className = "intake-status neutral";
+  try {
+    await serverRequest("/activities", { method: "POST", body: JSON.stringify(data) });
+    state.activityLedger = (await serverRequest("/activities")).data || [];
+    form.reset();
+    document.querySelector("#activity-task-id").dataset.ready = "";
+    renderTriage();
+    status.textContent = "Đã ghi activity append-only kèm bằng chứng.";
+    status.className = "intake-status ready";
+  } catch (error) {
+    status.textContent = error.message || "Không ghi được activity.";
+    status.className = "intake-status blocked";
+  } finally {
+    button.disabled = false;
+  }
 }
 
 function showCustomer(id) {
@@ -728,6 +771,7 @@ document.querySelector("#customer-dialog").addEventListener("click", (event) => 
 document.querySelector("#evidence-dialog").addEventListener("click", (event) => { if (event.target === event.currentTarget) event.currentTarget.close(); });
 
 document.querySelector("#access-form").addEventListener("submit", handleAccess);
+document.querySelector("#activity-capture-form")?.addEventListener("submit", submitActivity);
 renderIntake(null);
 if (readSession()) {
   unlockApplication().catch(() => {

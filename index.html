@@ -113,6 +113,12 @@
           <div id="intake-summary" class="intake-empty">Chọn file để xem sheet, cột nhận diện, bản ghi và các lỗi chặn phát hành.</div>
           <div class="table-wrap"><table class="intake-table"><thead><tr><th>Bảng hợp đồng</th><th>Nguồn nhận diện</th><th>Bản ghi</th><th>Trạng thái</th><th>Thiếu cột</th></tr></thead><tbody id="intake-table"></tbody></table></div>
         </article>
+        <article class="panel intake-results">
+          <div class="panel-head"><div><p class="eyebrow">Bước 4–6 · server release gate</p><h2>Phiên bản đã được kiểm tra</h2></div><button id="refresh-release-registry" class="text-button" type="button">Làm mới</button></div>
+          <p class="intake-hint">Chỉ server-side validator có thể đưa file vào đây. Người tạo release không thể tự phê duyệt release của mình. Kích hoạt chỉ đổi dashboard sandbox; Production Gate vẫn khóa.</p>
+          <div class="table-wrap"><table class="intake-table"><thead><tr><th>Phiên nhập</th><th>Server gate</th><th>Bản ghi</th><th>Thao tác</th></tr></thead><tbody id="server-import-table"><tr><td colspan="4">Nhấn “Làm mới” để xem registry riêng tư.</td></tr></tbody></table></div>
+          <div class="table-wrap"><table class="intake-table"><thead><tr><th>Release</th><th>Trạng thái</th><th>Thời điểm</th><th>Thao tác</th></tr></thead><tbody id="server-release-table"><tr><td colspan="4">Chưa có release candidate.</td></tr></tbody></table></div>
+        </article>
         <article class="panel">
           <p class="eyebrow">Quy tắc vận hành</p>
           <h2>Phân tách rõ ba hành động</h2>

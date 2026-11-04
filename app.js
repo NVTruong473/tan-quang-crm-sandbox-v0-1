@@ -328,6 +328,7 @@ async function unlockApplication() {
   }
   document.body.classList.remove("locked");
   document.body.classList.add("unlocked");
+  refreshReleaseRegistry();
 }
 
 async function handleAccess(event) {
@@ -418,7 +419,7 @@ function renderIntake(candidate) {
     : `<strong>Chưa thể phát hành.</strong> Cần đủ 4 bảng theo Data Contract, có đủ cột tối thiểu và ít nhất một bản ghi mỗi bảng.${extras}`;
   fingerprintLabel.textContent = `SHA-256: ${candidate.hash.slice(0, 12)}…`;
   preview.disabled = !ready;
-  persist.disabled = !ready || candidate.files.length !== 1;
+  persist.disabled = !ready;
 }
 
 function setIntakeStatus(message, kind = "neutral") {
@@ -488,29 +489,58 @@ function loadPreviewRelease() {
 async function persistImport() {
   const candidate = state.importCandidate;
   const button = document.querySelector("#persist-import");
-  if (!candidate || candidate.files.length !== 1 || !contractRows(candidate).every((row) => row.status === "READY")) return;
+  if (!candidate || !contractRows(candidate).every((row) => row.status === "READY")) return;
   let session = await activeSession();
   if (!session) { setIntakeStatus("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại trước khi lưu file.", "blocked"); return; }
   button.disabled = true;
   setIntakeStatus("Đang lưu file vào kho riêng tư và tạo phiên xét duyệt…", "working");
   try {
-    let response = await fetch(`${API_BASE}/imports`, {
-      method: "POST",
-      headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}`, "content-type": candidate.files[0].type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-file-name": encodeURIComponent(candidate.files[0].name) },
-      body: candidate.files[0],
-    });
+    const form = () => { const value = new FormData(); candidate.files.forEach((file) => value.append("files", file, file.name)); return value; };
+    let response = await fetch(`${API_BASE}/imports`, { method: "POST", headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}` }, body: form() });
     if (response.status === 401) {
       session = await refreshSession(session);
-      if (session) response = await fetch(`${API_BASE}/imports`, { method: "POST", headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}`, "content-type": candidate.files[0].type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-file-name": encodeURIComponent(candidate.files[0].name) }, body: candidate.files[0] });
+      if (session) response = await fetch(`${API_BASE}/imports`, { method: "POST", headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}` }, body: form() });
     }
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result.error || "Không thể lưu phiên nhập.");
-    setIntakeStatus(result.duplicate ? "File này đã có fingerprint trùng. Hệ thống giữ nguyên phiên bản cũ, không tạo bản sao." : `Đã lưu riêng tư phiên ${String(result.id).slice(0, 8)}…; trạng thái: chờ kiểm tra server và xét duyệt. Dashboard chưa thay đổi.`, "ready");
+    setIntakeStatus(result.duplicate ? "File này đã có fingerprint trùng. Hệ thống giữ nguyên phiên bản cũ, không tạo bản sao." : `Server đã kiểm tra và vật liệu hóa phiên ${String(result.id).slice(0, 8)}…. Dashboard chưa thay đổi; cần tạo release, duyệt chéo rồi mới kích hoạt.`, "ready");
+    refreshReleaseRegistry();
   } catch (error) {
     setIntakeStatus(error.message || "Không thể lưu file.", "blocked");
   } finally {
     button.disabled = false;
   }
+}
+
+async function serverRequest(path, options = {}) {
+  let session = await activeSession(); if (!session) throw new Error("Phiên đăng nhập đã hết hạn.");
+  const init = () => ({ ...options, headers: { apikey: window.TQ_SUPABASE.publishableKey, authorization: `Bearer ${session.access_token}`, "content-type": "application/json", ...(options.headers || {}) } });
+  let response = await fetch(`${API_BASE}${path}`, init());
+  if (response.status === 401 && (session = await refreshSession(session))) response = await fetch(`${API_BASE}${path}`, init());
+  const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.reason || body.error || "Server từ chối thao tác."); return body;
+}
+
+function releaseActionButton(label, action, id, extra = "") { return `<button class="text-button server-action" data-server-action="${action}" data-server-id="${id}" ${extra}>${label}</button>`; }
+async function refreshReleaseRegistry() {
+  const imports = document.querySelector("#server-import-table"), releases = document.querySelector("#server-release-table"); if (!imports || !releases || !readSession()) return;
+  try {
+    const [importResponse, releaseResponse] = await Promise.all([serverRequest("/imports"), serverRequest("/releases")]);
+    imports.innerHTML = (importResponse.data || []).map((row) => {
+      const validated = row.status === "VALIDATED" && row.materialized_at;
+      return `<tr><td><code>${escapeHTML(String(row.id).slice(0, 8))}</code><br><small>${escapeHTML(row.original_filename)}</small></td><td><span class="import-state ${validated ? "ready" : "blocked"}">${validated ? "SERVER VALIDATED" : escapeHTML(row.status)}</span></td><td>${Number(row.materialized_row_count || 0).toLocaleString("vi-VN")}</td><td>${validated ? releaseActionButton("Tạo release", "create", row.id) : "—"}</td></tr>`;
+    }).join("") || '<tr><td colspan="4">Chưa có phiên nhập đã kiểm tra.</td></tr>';
+    releases.innerHTML = (releaseResponse.data || []).map((row) => `<tr><td><code>${escapeHTML(row.release_code)}</code></td><td><span class="import-state ${row.status === "ACTIVE" ? "ready" : "blocked"}">${escapeHTML(row.status)}</span></td><td>${new Date(row.created_at).toLocaleString("vi-VN")}</td><td>${row.status === "PENDING_APPROVAL" ? releaseActionButton("Phê duyệt", "approve", row.id) : row.status === "APPROVED" ? releaseActionButton("Kích hoạt sandbox", "activate", row.id) : "—"}</td></tr>`).join("") || '<tr><td colspan="4">Chưa có release candidate.</td></tr>';
+  } catch (error) { setIntakeStatus(error.message || "Không tải được registry riêng tư.", "blocked"); }
+}
+
+async function handleReleaseAction(button) {
+  const action = button.dataset.serverAction, id = button.dataset.serverId; if (!action || !id) return; button.disabled = true;
+  try {
+    const body = action === "create" ? { import_id: id, release_code: `SBX-${id.replace(/-/g, "").slice(0, 12).toUpperCase()}`, notes: "Server materialized sandbox release" } : { release_id: id };
+    await serverRequest(`/releases/${action}`, { method: "POST", body: JSON.stringify(body) });
+    setIntakeStatus(action === "create" ? "Đã tạo release candidate. Một quản trị viên khác phải phê duyệt." : action === "approve" ? "Đã phê duyệt chéo. Release có thể kích hoạt vào sandbox." : "Đã kích hoạt release sandbox. Dashboard sẽ nạp bản này khi tải lại.", "ready");
+    await refreshReleaseRegistry();
+  } catch (error) { setIntakeStatus(error.message || "Thao tác release bị từ chối.", "blocked"); } finally { button.disabled = false; }
 }
 
 function renderKPIs() {
@@ -650,6 +680,8 @@ document.addEventListener("click", (event) => {
   if (customer) showCustomer(customer.dataset.customer);
   if (event.target.closest(".close")) document.querySelector("#customer-dialog").close();
   if (event.target.closest("#logout-button")) handleLogout();
+  const serverAction = event.target.closest(".server-action");
+  if (serverAction) handleReleaseAction(serverAction);
 });
 
 document.querySelector("#customer-search").addEventListener("input", renderCustomers);
@@ -657,6 +689,7 @@ document.querySelector("#segment-filter").addEventListener("change", renderCusto
 document.querySelector("#import-files").addEventListener("change", handleImportFiles);
 document.querySelector("#preview-release").addEventListener("click", loadPreviewRelease);
 document.querySelector("#persist-import").addEventListener("click", persistImport);
+document.querySelector("#refresh-release-registry").addEventListener("click", refreshReleaseRegistry);
 document.querySelector("#customer-dialog").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) event.currentTarget.close();
 });

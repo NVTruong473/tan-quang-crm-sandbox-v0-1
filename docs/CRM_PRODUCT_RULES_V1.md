@@ -11,10 +11,14 @@ Ngày hiệu lực: 2026-11-04. Phạm vi: Sandbox V0.1 và mọi phiên bản n
 
 ## 2. Luồng bắt buộc
 
-`Chọn file → Kiểm tra cục bộ → Báo cáo lỗi/mapping → Nạp xem trước Sandbox → Phê duyệt → Phát hành lưu trữ → Dashboard tự làm mới`
+`Chọn file → Kiểm tra cục bộ (chỉ hỗ trợ) → Server validate → Server materialize → Tạo release → Phê duyệt chéo → Kích hoạt sandbox → Dashboard tự nạp Active Release`
 
 - Chỉ bước sau cùng mới đổi số liệu đang công bố.
-- Một phiên không đạt Data Contract phải vào trạng thái `QUARANTINED`; không được suy diễn giá trị thiếu hoặc âm thầm bỏ cột trọng yếu.
+- Browser preflight không phải bằng chứng phát hành. Server kiểm lại chữ ký XLSX/CSV, số lượng/giới hạn dữ liệu, Data Contract, kiểu số, khóa trùng và quan hệ `customer_id` trước khi có thể tạo release.
+- Server không thực thi macro, không đánh giá công thức XLSX, từ chối XML DTD/entity, archive mã hóa/không an toàn và giới hạn kích thước sau giải nén. File lớn hơn giới hạn đồng bộ phải đi qua worker/queue chuyên dụng, không được tự nới giới hạn.
+- Một phiên không đạt Data Contract bị server từ chối và không được lưu/version hóa như dữ liệu hợp lệ; không được suy diễn giá trị thiếu hoặc âm thầm bỏ cột trọng yếu.
+- Chỉ materialization bất biến, có checksum riêng, mới được dashboard của release `ACTIVE` đọc. Dashboard không bao giờ đọc trực tiếp file upload.
+- Người tạo release không được tự phê duyệt release đó (maker–checker); mọi chuyển trạng thái có audit log append-only.
 - `Nạp xem trước Sandbox` không lưu file, không ảnh hưởng production và hết hiệu lực khi kết thúc phiên trình duyệt.
 
 ## 3. Data Contract tối thiểu hiện tại
@@ -28,7 +32,7 @@ Ngày hiệu lực: 2026-11-04. Phạm vi: Sandbox V0.1 và mọi phiên bản n
 
 ## 4. Bảo mật và quyền riêng tư
 
-- File nghiệp vụ được lưu vào private storage có RLS khi tính năng phát hành lưu trữ được mở; không dùng public bucket.
+- File nghiệp vụ chỉ được lưu sau server validation, trong private storage; browser không có policy Storage trực tiếp. Edge Function dùng service role tối thiểu cần thiết, còn bảng registry/materialization đều bật RLS.
 - Không lưu service key, khóa OpenRouter hay mật khẩu trong frontend, GitHub, Excel, log hoặc tài liệu công khai.
 - LLM bị tắt mặc định. Khi được bật, nó chỉ nhận metadata/dictionary đã được phê duyệt hoặc dữ liệu đã giảm nhận diện; không nhận file thô mặc định.
 - LLM chỉ trả về JSON schema cho đề xuất mapping hoặc giải thích lỗi. Kết quả phải qua deterministic validation và phê duyệt của quản trị viên.
@@ -43,4 +47,4 @@ Ngày hiệu lực: 2026-11-04. Phạm vi: Sandbox V0.1 và mọi phiên bản n
 ## 6. Ranh giới hiện tại
 
 - Production Gate vẫn `BLOCKED`; không xây Production Scoring Engine hoặc financial scoring từ dữ liệu trống/synthetic.
-- Bước kế tiếp sau V1 local preflight là private storage + release registry + RLS + approval audit log. Chỉ sau đó mới cho phép phát hành nhập liệu bền vững.
+- Private storage + release registry + RLS + audit log + server-side validator/materializer đã có ở Sandbox V0.1. Chưa có antivirus/CDR hay worker/queue cho file lớn; đây là điều kiện bắt buộc trước khi mở quy mô nhập liệu production.

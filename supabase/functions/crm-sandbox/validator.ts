@@ -1,0 +1,76 @@
+export type InputFile = { name: string; type: string; bytes: Uint8Array };
+export type Materialization = {
+  tables: Record<string, Array<Record<string, string>>>;
+  record_counts: Record<string, number>;
+  report: Record<string, unknown>;
+};
+
+const MAX_SOURCE_BYTES = 8 * 1024 * 1024;
+const MAX_EXPANDED_BYTES = 10 * 1024 * 1024;
+const MAX_ROWS = 50_000;
+const REQUIRED: Record<string, string[]> = {
+  customer_360: ["customer_id", "customer_name", "revenue", "gross_profit", "outstanding", "weighted_pipeline"],
+  scoring_sandbox: ["customer_id", "total_score", "segment"],
+  opportunities: ["customer_id", "opportunity_name", "estimated_value", "probability_pct", "stage", "status"],
+  crm_activities: ["customer_id", "activity_date", "activity_type", "summary", "outcome", "owner"],
+};
+const SOURCE_NAMES: Record<string, string[]> = {
+  customer_360: ["customer_360", "customer360", "khach_hang", "khachhang", "customers"],
+  scoring_sandbox: ["scoring_sandbox", "scoring", "scores", "diem_khach_hang"],
+  opportunities: ["opportunities", "opportunity", "co_hoi", "pipeline"],
+  crm_activities: ["crm_activities", "activities", "activity", "hoat_dong"],
+};
+const ALIASES: Record<string, string[]> = {
+  customer_id: ["customer_id", "customer id", "ma_khach_hang", "mã khách hàng", "ma khach hang"], customer_name: ["customer_name", "customer name", "ten_khach_hang", "tên khách hàng", "ten khach hang"],
+  revenue: ["revenue", "doanh_thu", "doanh thu"], gross_profit: ["gross_profit", "gross profit", "loi_nhuan_gop", "lợi nhuận gộp"], outstanding: ["outstanding", "cong_no", "công nợ"], weighted_pipeline: ["weighted_pipeline", "weighted pipeline", "pipeline_co_trong_so", "pipeline có trọng số"],
+  total_score: ["total_score", "total score", "tong_diem", "tổng điểm"], segment: ["segment", "phan_khuc", "phân khúc", "nhom", "nhóm"], opportunity_name: ["opportunity_name", "opportunity name", "ten_co_hoi", "tên cơ hội"], estimated_value: ["estimated_value", "estimated value", "gia_tri_uoc_tinh", "giá trị ước tính"], probability_pct: ["probability_pct", "probability", "xac_suat", "xác suất"], stage: ["stage", "giai_doan", "giai đoạn"], status: ["status", "trang_thai", "trạng thái"], activity_date: ["activity_date", "activity date", "ngay_hoat_dong", "ngày hoạt động"], activity_type: ["activity_type", "activity type", "loai_hoat_dong", "loại hoạt động"], summary: ["summary", "tom_tat", "tóm tắt"], outcome: ["outcome", "ket_qua", "kết quả"], owner: ["owner", "nguoi_phu_trach", "người phụ trách"],
+};
+const normal = (value: unknown) => String(value ?? "").trim().toLocaleLowerCase("vi-VN").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+const canonical = (value: string) => Object.entries(ALIASES).find(([, values]) => values.map(normal).includes(normal(value)))?.[0] ?? normal(value);
+const text = (bytes: Uint8Array) => new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\uFEFF/, "");
+const xmlDecode = (value: string) => value.replace(/&(?:amp|lt|gt|quot|apos);|&#(\d+);|&#x([0-9a-f]+);/gi, (token, dec, hex) => dec ? String.fromCodePoint(Number(dec)) : hex ? String.fromCodePoint(parseInt(hex, 16)) : ({ "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" }[token] ?? token));
+
+function csv(source: string): Array<Record<string, string>> {
+  if (source.includes("\0")) throw new Error("CSV_CONTAINS_NUL");
+  const rows: string[][] = []; let row: string[] = []; let cell = ""; let quoted = false;
+  for (let i = 0; i < source.length; i += 1) { const c = source[i]; if (quoted) { if (c === '"' && source[i + 1] === '"') { cell += c; i += 1; } else if (c === '"') quoted = false; else cell += c; } else if (c === '"') quoted = true; else if (c === ",") { row.push(cell); cell = ""; } else if (c === "\n") { row.push(cell.replace(/\r$/, "")); rows.push(row); row = []; cell = ""; } else cell += c; }
+  if (quoted) throw new Error("CSV_UNCLOSED_QUOTE"); if (cell || row.length) { row.push(cell); rows.push(row); }
+  const headers = (rows.shift() ?? []).map(canonical); if (!headers.length || headers.some((v) => !v)) throw new Error("CSV_HEADERS_INVALID");
+  return rows.filter((r) => r.some((v) => v.trim())).map((r) => Object.fromEntries(headers.map((h, i) => [h, (r[i] ?? "").trim()])));
+}
+
+function u16(v: DataView, o: number) { return v.getUint16(o, true); } function u32(v: DataView, o: number) { return v.getUint32(o, true); }
+async function xlsx(bytes: Uint8Array): Promise<Map<string, Array<Record<string, string>>>> {
+  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) throw new Error("XLSX_SIGNATURE_INVALID");
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength); let eocd = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i -= 1) if (u32(view, i) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error("XLSX_ZIP_INVALID"); const count = u16(view, eocd + 10); if (count > 200) throw new Error("XLSX_TOO_MANY_ENTRIES"); let p = u32(view, eocd + 16), total = 0; const entries = new Map<string, string>();
+  for (let i = 0; i < count; i += 1) { if (u32(view, p) !== 0x02014b50) throw new Error("XLSX_DIRECTORY_INVALID"); const flags = u16(view, p + 8), method = u16(view, p + 10), compressed = u32(view, p + 20), expanded = u32(view, p + 24), nl = u16(view, p + 28), el = u16(view, p + 30), cl = u16(view, p + 32), offset = u32(view, p + 42), name = text(bytes.slice(p + 46, p + 46 + nl));
+    total += expanded; if (flags & 1 || total > MAX_EXPANDED_BYTES || name.includes("..") || name.startsWith("/") || /vbaProject\.bin$/i.test(name)) throw new Error("XLSX_UNSAFE_ARCHIVE"); if (u32(view, offset) !== 0x04034b50) throw new Error("XLSX_LOCAL_ENTRY_INVALID"); const ln = u16(view, offset + 26), le = u16(view, offset + 28), payload = bytes.slice(offset + 30 + ln + le, offset + 30 + ln + le + compressed);
+    let raw: Uint8Array; if (method === 0) raw = payload; else if (method === 8) raw = new Uint8Array(await new Response(new Blob([payload]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer()); else throw new Error("XLSX_COMPRESSION_UNSUPPORTED");
+    if (name.endsWith(".xml") || name.endsWith(".rels")) { const value = text(raw); if (/<!DOCTYPE|<!ENTITY/i.test(value)) throw new Error("XLSX_XML_DTD_FORBIDDEN"); entries.set(name, value); } p += 46 + nl + el + cl;
+  }
+  const workbook = entries.get("xl/workbook.xml"), rels = entries.get("xl/_rels/workbook.xml.rels"); if (!workbook || !rels) throw new Error("XLSX_WORKBOOK_INVALID");
+  const relationship = new Map([...rels.matchAll(/<Relationship\b[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"[^>]*\/?/g)].map((m) => [m[1], m[2]]));
+  const shared = [...(entries.get("xl/sharedStrings.xml") ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => xmlDecode([...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((x) => x[1]).join("")));
+  const output = new Map<string, Array<Record<string, string>>>();
+  for (const sheet of workbook.matchAll(/<sheet\b[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"[^>]*\/?/g)) { const target = relationship.get(sheet[2]); const path = target ? `xl/${target.replace(/^\/?(?:xl\/)?/, "")}` : ""; const xml = entries.get(path); if (!xml) continue; const matrix: string[][] = [];
+    for (const r of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) { const cells: string[] = []; for (const c of r[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) { if (/<f[\s>]/.test(c[2])) throw new Error("XLSX_FORMULA_FORBIDDEN"); const ref = /\br="([A-Z]+)\d+"/i.exec(c[1])?.[1] ?? "A"; let col = 0; for (const char of ref.toUpperCase()) col = col * 26 + char.charCodeAt(0) - 64; const type = /\bt="([^"]+)"/.exec(c[1])?.[1]; const value = /<v>([\s\S]*?)<\/v>/.exec(c[2])?.[1] ?? (/<t[^>]*>([\s\S]*?)<\/t>/.exec(c[2])?.[1] ?? ""); cells[col - 1] = type === "s" ? (shared[Number(value)] ?? "") : xmlDecode(value); } matrix.push(cells); }
+    const headers = (matrix.shift() ?? []).map(canonical); output.set(sheet[1], matrix.filter((r) => r.some((v) => String(v ?? "").trim())).map((r) => Object.fromEntries(headers.map((h, i) => [h, String(r[i] ?? "").trim()]))));
+  } return output;
+}
+
+function tableKey(name: string, rows: Array<Record<string, string>>) { const n = normal(name.replace(/\.[^.]+$/, "")); return Object.keys(REQUIRED).find((k) => SOURCE_NAMES[k].map(normal).includes(n)) ?? Object.keys(REQUIRED).find((k) => REQUIRED[k].every((field) => field in (rows[0] ?? {}))) ?? null; }
+function finite(row: Record<string, string>, field: string, table: string, index: number) { if (!Number.isFinite(Number(row[field]))) throw new Error(`${table}:ROW_${index + 2}_${field.toUpperCase()}_INVALID`); }
+export async function validateAndMaterialize(files: InputFile[]): Promise<Materialization> {
+  if (!files.length || files.length > 4) throw new Error("FILE_COUNT_INVALID"); const total = files.reduce((n, file) => n + file.bytes.byteLength, 0); if (total > MAX_SOURCE_BYTES) throw new Error("SOURCE_SIZE_EXCEEDS_8MB_VALIDATION_LIMIT"); const workbook = files.filter((f) => /\.xlsx$/i.test(f.name)); if (workbook.length > 1 || (workbook.length && files.length !== 1) || files.some((f) => !/\.(xlsx|csv)$/i.test(f.name))) throw new Error("INPUT_COMBINATION_INVALID");
+  const sources = new Map<string, Array<Record<string, string>>>(); if (workbook.length) for (const [name, rows] of await xlsx(workbook[0].bytes)) sources.set(name, rows); else for (const file of files) sources.set(file.name, csv(text(file.bytes)));
+  const tables: Record<string, Array<Record<string, string>>> = {}; for (const [name, rows] of sources) { const key = tableKey(name, rows); if (!key || tables[key]) throw new Error(`TABLE_NOT_RECOGNIZED_OR_DUPLICATE:${name}`); tables[key] = rows; }
+  for (const [key, fields] of Object.entries(REQUIRED)) { const rows = tables[key]; if (!rows?.length) throw new Error(`TABLE_REQUIRED:${key}`); const missing = fields.filter((field) => !(field in rows[0])); if (missing.length) throw new Error(`HEADER_REQUIRED:${key}:${missing.join(",")}`); }
+  const records = Object.values(tables).reduce((n, rows) => n + rows.length, 0); if (records > MAX_ROWS) throw new Error("ROW_LIMIT_EXCEEDED"); const ids = new Set<string>();
+  tables.customer_360.forEach((r, i) => { if (!r.customer_id || !r.customer_name || ids.has(r.customer_id)) throw new Error(`CUSTOMER_ID_INVALID_OR_DUPLICATE:ROW_${i + 2}`); ids.add(r.customer_id); ["revenue", "gross_profit", "outstanding", "weighted_pipeline"].forEach((f) => finite(r, f, "customer_360", i)); });
+  tables.scoring_sandbox.forEach((r, i) => { if (!ids.has(r.customer_id) || !r.segment) throw new Error(`SCORING_REFERENCE_INVALID:ROW_${i + 2}`); finite(r, "total_score", "scoring_sandbox", i); });
+  tables.opportunities.forEach((r, i) => { if (!ids.has(r.customer_id) || !r.opportunity_name || !r.stage || !r.status) throw new Error(`OPPORTUNITY_REFERENCE_INVALID:ROW_${i + 2}`); finite(r, "estimated_value", "opportunities", i); const p = Number(r.probability_pct); if (!Number.isFinite(p) || p < 0 || p > 1) throw new Error(`OPPORTUNITY_PROBABILITY_OUT_OF_RANGE:ROW_${i + 2}`); });
+  tables.crm_activities.forEach((r, i) => { if (!ids.has(r.customer_id) || !r.activity_type || !r.summary || !r.outcome || !r.owner || !/^\d{4}-\d{2}-\d{2}$/.test(r.activity_date)) throw new Error(`ACTIVITY_INVALID:ROW_${i + 2}`); });
+  return { tables, record_counts: Object.fromEntries(Object.entries(tables).map(([k, rows]) => [k, rows.length])), report: { validator_version: "SERVER_VALIDATOR_V1", contract_version: "DATA_CONTRACT_V1", source_files: files.map((f) => ({ name: f.name, bytes: f.bytes.byteLength })), total_records: records, result: "VALIDATED" } };
+}

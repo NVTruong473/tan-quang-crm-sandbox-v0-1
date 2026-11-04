@@ -659,6 +659,7 @@ function setView(id) {
   document.querySelector("#page-title").textContent = {
     overview: "Ưu tiên chăm sóc khách hàng",
     customers: "Danh sách khách hàng",
+    scorecard: "Điểm khách hàng & đề xuất CSKH",
     opportunities: "Cơ hội kinh doanh",
     activities: "Hoạt động CRM",
     intake: "Nhập & phát hành dữ liệu",

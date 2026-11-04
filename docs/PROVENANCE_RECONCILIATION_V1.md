@@ -1,6 +1,6 @@
 # Provenance Reconciliation V1
 
-**Release kiểm thử:** `SBX-EVIDENCE-V3-1872B8BC`  
+**Release kiểm thử:** `SBX-TRIAGE-V1-6621E58D`  
 **Workbook đối soát:** `THÔNG TIN KHÁCH HÀNG.xlsx`  
 **Ngày chạy:** 2026-11-04  
 

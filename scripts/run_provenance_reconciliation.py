@@ -58,7 +58,7 @@ def main():
         actual = num(ledger_map[(customer, metric)]["value"])
         results.append({"customer_id": customer, "metric": metric, "expected": str(expected), "ledger": str(actual), "match": expected == actual, "source_hint": ledger_map[(customer, metric)]["source_record_hint"]})
     passed = sum(1 for r in results if r["match"])
-    output = {"release": "SBX-EVIDENCE-V3-1872B8BC", "sample_size": len(results), "passed": passed, "pass_rate_pct": passed / len(results) * 100, "gate": "PASS" if passed == len(results) else "BLOCKED", "tests": results}
+    output = {"release": "SBX-TRIAGE-V1-6621E58D", "sample_size": len(results), "passed": passed, "pass_rate_pct": passed / len(results) * 100, "gate": "PASS" if passed == len(results) else "BLOCKED", "tests": results}
     print(json.dumps(output, ensure_ascii=False, indent=2))
     if passed != len(results): sys.exit(2)
 

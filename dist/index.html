@@ -37,6 +37,7 @@
         <button class="nav-item active" data-view="overview">Ưu tiên CSKH</button>
         <button class="nav-item" data-view="customers">Danh sách khách hàng</button>
         <button class="nav-item" data-view="scorecard">Điểm khách hàng</button>
+        <button class="nav-item" data-view="triage">Hàng đợi CSKH</button>
         <button class="nav-item" data-view="intake">Nhập & phát hành dữ liệu</button>
         <button class="nav-item" data-view="safety">Safety Gate</button>
       </nav>
@@ -76,6 +77,12 @@
           <article class="panel span-2"><p class="eyebrow">Lớp đề xuất tăng cường</p><h2>Điểm dẫn đến hành động, không chỉ là xếp hạng</h2><div class="control-grid intake-rules"><div><strong>Coverage dữ liệu</strong><span>Hiện tỷ lệ trọng số có bằng chứng; để trống khác 0. Không đủ dữ liệu thì không gán A/B/C/D.</span></div><div><strong>Cảnh báo rủi ro</strong><span>Tách cảnh báo công nợ quá hạn và giảm hợp tác khỏi điểm để CSKH không bỏ sót khách giá trị cao có rủi ro.</span></div><div><strong>Hàng đợi CSKH</strong><span>Ưu tiên theo điểm đã duyệt, cảnh báo và thời điểm cần liên hệ; vẫn cho phép quản trị viên ghi lý do ngoại lệ.</span></div><div><strong>Giải thích được</strong><span>Mỗi điểm phải truy ra nguồn, công thức, ngày chốt số liệu và người xác nhận; không có điểm AI tự suy đoán.</span></div></div></article>
           <article class="panel"><p class="eyebrow">Trạng thái hiện tại</p><h2>Chưa được phép chấm chính thức</h2><div class="status-block blocked">CHƯA ĐỦ DỮ LIỆU</div><p>Workbook hiện có công thức chấm điểm nháp, nhưng dữ liệu hợp đồng liên kết và các tín hiệu tiềm năng/thanh toán chưa đủ. Hệ thống chỉ hiển thị hàng đợi bổ sung bằng chứng.</p><p class="intake-hint">Khi đủ dữ liệu, màn này sẽ hiển thị điểm, Coverage, nguồn giải thích và hành động CSKH cho từng khách.</p></article>
         </div>
+      </section>
+
+      <section id="triage" class="view">
+        <article class="panel intake-hero"><div><p class="eyebrow">Deterministic Triage V1 · Evidence Only</p><h2>Hàng đợi hành động không dùng scoring</h2><p>Engine chỉ dùng dữ liệu đã liên kết và trạng thái bằng chứng. Khách thiếu hợp đồng không bị xem là điểm thấp; hợp đồng chưa định danh bị loại khỏi chỉ số khách hàng.</p></div><span class="local-pill">SCORING LOCKED</span></article>
+        <article class="panel"><div class="panel-head"><div><p class="eyebrow">CSKH</p><h2>Customer Triage</h2></div><span class="muted">P1 rủi ro · P2 duy trì · P3 thiếu bằng chứng</span></div><div class="table-wrap"><table><thead><tr><th>Khách hàng</th><th>Ưu tiên</th><th>Hàng đợi</th><th>Doanh thu xác minh</th><th>Công nợ</th><th>Bằng chứng</th><th>Hành động</th></tr></thead><tbody id="triage-table"></tbody></table></div></article>
+        <article class="panel"><div class="panel-head"><div><p class="eyebrow">Quarantine</p><h2>Unattributed Contracts</h2></div><span class="muted">Không phân bổ vào khách hàng</span></div><div class="table-wrap"><table><thead><tr><th>ID</th><th>Dòng nguồn</th><th>Mã HĐ</th><th>Giá trị HĐ</th><th>Doanh thu ghi nhận</th><th>Lỗi</th><th>Xử lý</th></tr></thead><tbody id="unattributed-table"></tbody></table></div></article>
       </section>
 
       <section id="opportunities" class="view">

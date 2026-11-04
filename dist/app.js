@@ -9,6 +9,8 @@ const DATA = {
   opportunities: `${API_BASE}/data/opportunities.csv`,
   activities: `${API_BASE}/data/crm_activities.csv`,
   evidence: `${API_BASE}/data/evidence_ledger.csv`,
+  triage: `${API_BASE}/data/cskh_triage.csv`,
+  unattributed: `${API_BASE}/data/unattributed_contracts.csv`,
 };
 
 const state = {
@@ -17,6 +19,8 @@ const state = {
   opportunities: [],
   activities: [],
   evidence: [],
+  triage: [],
+  unattributed: [],
   customerMap: new Map(),
   scoreMap: new Map(),
   importCandidate: null,
@@ -388,6 +392,7 @@ function renderAll() {
   renderCustomers();
   renderOpportunities();
   renderActivities();
+  renderTriage();
 }
 
 function contractRows(candidate) {
@@ -639,6 +644,14 @@ function renderActivities() {
   )).join("");
 }
 
+function renderTriage() {
+  const triageBody = document.querySelector("#triage-table");
+  const unattributedBody = document.querySelector("#unattributed-table");
+  if (!triageBody || !unattributedBody) return;
+  triageBody.innerHTML = state.triage.map((row) => `<tr data-customer="${escapeHTML(row.customer_id)}"><td><strong>${escapeHTML(row.customer_id)}</strong><br><small>${escapeHTML(row.customer_name)}</small></td><td><span class="segment">${escapeHTML(row.triage_priority)}</span></td><td>${escapeHTML(row.triage_queue)}</td><td>${moneyOrNA(row.verified_revenue)}</td><td>${moneyOrNA(row.outstanding)}</td><td>${escapeHTML(row.evidence_status)}</td><td>${escapeHTML(row.cskh_action)}</td></tr>`).join("") || '<tr><td colspan="7">Không có hàng đợi CSKH.</td></tr>';
+  unattributedBody.innerHTML = state.unattributed.slice(0, 200).map((row) => `<tr><td><code>${escapeHTML(row.unattributed_id)}</code></td><td>${escapeHTML(row.source_row)}</td><td>${escapeHTML(row.contract_id || "—")}</td><td>${moneyOrNA(row.contract_value)}</td><td>${moneyOrNA(row.recognized_revenue)}</td><td><span class="segment">${escapeHTML(row.issue_code)}</span></td><td>${escapeHTML(row.disposition)}</td></tr>`).join("") || '<tr><td colspan="7">Không có hợp đồng chưa định danh.</td></tr>';
+}
+
 function showCustomer(id) {
   const row = state.customerMap.get(id);
   const score = state.scoreMap.get(id);
@@ -672,6 +685,7 @@ function setView(id) {
     overview: "Ưu tiên chăm sóc khách hàng",
     customers: "Danh sách khách hàng",
     scorecard: "Điểm khách hàng & đề xuất CSKH",
+    triage: "Hàng đợi CSKH & hợp đồng chưa định danh",
     opportunities: "Cơ hội kinh doanh",
     activities: "Hoạt động CRM",
     intake: "Nhập & phát hành dữ liệu",

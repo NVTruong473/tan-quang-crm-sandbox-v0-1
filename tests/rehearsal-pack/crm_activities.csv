@@ -1,0 +1,3 @@
+customer_id,activity_date,activity_type,summary,outcome,owner
+SYN-RH-001,2026-11-04,CALL,Rehearsal call,Confirmed,Admin A
+SYN-RH-002,2026-11-03,EMAIL,Rehearsal email,Sent,Admin A

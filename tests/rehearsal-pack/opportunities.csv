@@ -1,0 +1,3 @@
+customer_id,opportunity_name,estimated_value,probability_pct,stage,status
+SYN-RH-001,Rehearsal renewal,40000000,0.6,PROPOSAL,OPEN
+SYN-RH-002,Rehearsal upgrade,20000000,0.4,QUALIFIED,OPEN

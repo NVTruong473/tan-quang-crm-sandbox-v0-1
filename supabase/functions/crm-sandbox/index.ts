@@ -70,10 +70,21 @@ function serviceClient() {
   return createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+function userRpcClient(request: Request) {
+  const url = Deno.env.get("SUPABASE_URL") ?? "";
+  const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+  const token = bearerToken(request);
+  if (!url || !anonKey || !token) throw new Error("user_rpc_configuration_error");
+  return createClient(url, anonKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { authorization: `Bearer ${token}` } },
+  });
+}
+
 async function listRegistry(request: Request, table: "crm_import_versions" | "crm_approval_audit") {
   const admin = await authenticatedAdmin(request);
   if (!admin) return json(request, { error: "admin_auth_required" }, 401);
-  const client = serviceClient();
+  const client = userRpcClient(request);
   const query = table === "crm_import_versions"
     ? client.from(table).select("id,sha256,original_filename,content_type,byte_size,status,created_at,validated_at,materialized_at,materialized_row_count,server_validation,quarantined_reason").order("created_at", { ascending: false }).limit(50)
     : client.from(table).select("id,import_id,release_id,event_type,actor_id,event_at,payload").order("event_at", { ascending: false }).limit(100);
@@ -145,7 +156,7 @@ async function releaseAction(request: Request, action: "create" | "approve" | "a
   const admin = await authenticatedAdmin(request);
   if (!admin) return json(request, { error: "admin_auth_required" }, 401);
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
-  const client = serviceClient();
+  const client = userRpcClient(request);
   const args = action === "create"
     ? { p_import_id: body.import_id, p_release_code: body.release_code, p_notes: body.notes ?? null }
     : { p_release_id: body.release_id };

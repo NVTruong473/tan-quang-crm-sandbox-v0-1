@@ -28,3 +28,10 @@
 - Kiểm tra đối chiếu dashboard với workbook đạt 100% trên mẫu kiểm tra.
 
 Khi chưa đạt, CRM chỉ hiển thị hàng đợi CSKH theo bằng chứng và giữ `OFFICIAL_SCORE_BLOCKED`.
+
+## Kết quả vòng 1
+
+- Release: `SBX-READINESS-59167483`.
+- 17 khách được materialize từ đúng workbook nguồn; 16 khách có Coverage `0%`, 1 khách có Coverage `50%`.
+- 17/17 bản ghi giữ `NOT_READY`; không có `official_score` và không có A/B/C/D được phát hành.
+- Đây là vòng kiểm chứng quy trình, chưa phải xác nhận rằng dữ liệu nghiệp vụ đã đầy đủ.

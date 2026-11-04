@@ -1,0 +1,54 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { FileBlob, SpreadsheetFile } from "@oai/artifact-tool";
+
+const inputPath = path.resolve("outputs/2026-11-04-customer-contract-v1/tan-quang-customer-contract-review-v1.xlsx");
+const outputDir = path.resolve("outputs/2026-11-04-customer-contract-v1");
+const outputPath = path.join(outputDir, "tan-quang-data-readiness-campaign-v1.xlsx");
+const previewPath = path.join(outputDir, "data-readiness-campaign-preview.png");
+const wb = await SpreadsheetFile.importXlsx(await FileBlob.load(inputPath));
+const source = wb.worksheets.getItem("03 CSKH Review");
+const values = source.getRange("A6:L22").values;
+const campaign = wb.worksheets.add("05 Readiness Campaign");
+campaign.showGridLines = false;
+campaign.tabColor = "#C55A11";
+const rows = values.filter((r) => String(r[0] ?? "").trim()).map((r) => {
+  const hasContract = Number(r[2] || 0) > 0;
+  const status = String(r[6] ?? "");
+  const priority = hasContract ? "P1 — đã có HĐ, hoàn thiện tín hiệu để chấm" : "P2 — cần bằng chứng HĐ trước";
+  const fields = hasContract
+    ? "Dự án mới; bảo trì/thay thế; mở rộng; phối hợp; người quyết định; kiểm tra kỳ dữ liệu 2024–2026"
+    : "Mã HĐ; ngày ký; trạng thái; doanh thu ghi nhận; giá vốn/xác nhận; công nợ; hạn và ngày thanh toán";
+  const owner = hasContract ? "CSKH phụ trách + Kế toán trưởng" : "Kế toán hợp đồng + CSKH";
+  const dueDate = hasContract ? "2026-11-07" : "2026-11-12";
+  return [r[0], r[1], priority, status, fields, owner, dueDate, "Đang thu thập", "", "", ""];
+});
+const headers = ["Mã KH", "Tên công ty", "Mức ưu tiên", "Trạng thái hiện tại", "Trường cần bổ sung", "Đầu mối xác minh", "Hạn xử lý", "Trạng thái chiến dịch", "Người xác nhận", "Ngày xác nhận", "Ghi chú bằng chứng"];
+campaign.getRange("A2:K2").merge();
+campaign.getRange("A2").values = [["DATA READINESS CAMPAIGN V1 — Đóng Gate bằng bằng chứng"]];
+campaign.getRange("A3:K3").merge();
+campaign.getRange("A3").values = [["Không tự điền dữ liệu. Chỉ chuyển trạng thái sang Đã xác nhận khi có nguồn, người xác nhận và ngày xác nhận."]];
+campaign.getRange("A5:K5").values = [headers];
+campaign.getRange(`A6:K${5 + rows.length}`).values = rows;
+campaign.getRange("A2:K2").format = { font: { name: "Arial", size: 14, bold: true, color: "#17365D" } };
+campaign.getRange("A3:K3").format = { font: { name: "Arial", size: 10, italic: true, color: "#7F6000" }, fill: "#FFF2CC" };
+campaign.getRange("A5:K5").format = { fill: "#17365D", font: { name: "Arial", size: 10, bold: true, color: "#FFFFFF" }, horizontalAlignment: "center", verticalAlignment: "center", wrapText: true };
+campaign.getRange(`A6:K${5 + rows.length}`).format = { font: { name: "Arial", size: 10 }, verticalAlignment: "center", wrapText: true };
+campaign.getRange(`G6:K${5 + rows.length}`).format.fill = "#FFF2CC";
+campaign.getRange(`A6:K${5 + rows.length}`).format.borders = { preset: "outside", style: "thin", color: "#D9E2F3" };
+campaign.tables.add(`A5:K${5 + rows.length}`, true, "DataReadinessCampaign");
+campaign.freezePanes.freezeRows(5);
+campaign.freezePanes.freezeColumns(2);
+campaign.getRange("A:K").format.autofitColumns();
+campaign.getRange("B:B").format.columnWidth = 30;
+campaign.getRange("E:E").format.columnWidth = 62;
+campaign.getRange("K:K").format.columnWidth = 32;
+wb.recalculate();
+const inspection = await wb.inspect({ kind: "workbook,sheet,table", maxChars: 4000, tableMaxRows: 3, tableMaxCols: 11 });
+if (inspection.ndjson.includes("#REF!") || inspection.ndjson.includes("#DIV/0!") || inspection.ndjson.includes("#VALUE!")) throw new Error("Campaign workbook contains formula errors.");
+await fs.mkdir(outputDir, { recursive: true });
+const preview = await wb.render({ sheetName: "05 Readiness Campaign", autoCrop: "all", scale: 1, format: "png" });
+await fs.writeFile(previewPath, new Uint8Array(await preview.arrayBuffer()));
+const out = await SpreadsheetFile.exportXlsx(wb);
+await out.save(outputPath);
+console.log(JSON.stringify({ outputPath, previewPath, campaignRows: rows.length, p1: rows.filter((r) => String(r[2]).startsWith("P1")).length, p2: rows.filter((r) => String(r[2]).startsWith("P2")).length }));

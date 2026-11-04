@@ -73,6 +73,7 @@ function customerContractProfile(sources: Map<string, Array<Record<string, strin
   const ids = new Set<string>();
   for (const customer of customers) { const id = field(customer, "ma_kh"); if (ids.has(id)) throw new Error("CUSTOMER_CONTRACT_PROFILE_DUPLICATE_CUSTOMER_ID"); ids.add(id); }
   const byCustomer = new Map<string, { count: number; revenue: number; profit: number; outstanding: number; incompleteCost: number }>();
+  const contractsByCustomer = new Map<string, Array<Record<string, string>>>();
   let orphanContracts = 0; let validContracts = 0;
   for (const row of contractSheet[1]) {
     const contractId = field(row, "ma_hd"); if (!contractId) continue;
@@ -82,15 +83,30 @@ function customerContractProfile(sources: Map<string, Array<Record<string, strin
     current.count += 1; current.revenue += numberOrZero(field(row, "doanh_thu_ghi_nhan")); current.outstanding += numberOrZero(field(row, "cong_no"));
     if (normal(field(row, "xac_nhan_gia_von")) === "da_xac_nhan") current.profit += numberOrZero(field(row, "doanh_thu_ghi_nhan")) - numberOrZero(field(row, "gia_von")); else current.incompleteCost += 1;
     byCustomer.set(customerId, current); validContracts += 1;
+    contractsByCustomer.set(customerId, [...(contractsByCustomer.get(customerId) ?? []), row]);
   }
-  const customer360 = customers.map((row) => { const id = field(row, "ma_kh"), history = byCustomer.get(id) ?? { count: 0, revenue: 0, profit: 0, outstanding: 0, incompleteCost: 0 }; const evidence = history.count === 0 ? "NEEDS_CONTRACT_EVIDENCE" : history.incompleteCost > 0 ? "REVIEW_COST_EVIDENCE" : "CONTRACT_HISTORY_PRESENT"; return { customer_id: id, customer_name: field(row, "ten_cong_ty"), revenue: String(history.revenue), gross_profit: String(history.profit), outstanding: String(history.outstanding), weighted_pipeline: "", contract_count: String(history.count), orphan_contract_count: String(orphanContracts), evidence_status: evidence, priority_reason: evidence === "NEEDS_CONTRACT_EVIDENCE" ? "Chưa có hợp đồng liên kết; cần bổ sung bằng chứng trước khi xếp tiềm năng." : "Có lịch sử hợp đồng đã liên kết; ưu tiên kiểm tra CSKH theo dữ liệu hợp đồng." }; });
+  const customer360 = customers.map((row) => {
+    const id = field(row, "ma_kh");
+    const history = byCustomer.get(id) ?? { count: 0, revenue: 0, profit: 0, outstanding: 0, incompleteCost: 0 };
+    const linked = contractsByCustomer.get(id) ?? [];
+    const hasStartDate = Boolean(field(row, "bat_dau_hop_tac", "ngay_bat_dau_hop_tac"));
+    const hasRevenue = linked.length > 0 && linked.every((contract) => field(contract, "doanh_thu_ghi_nhan"));
+    const hasCost = linked.length > 0 && linked.every((contract) => field(contract, "gia_von") && field(contract, "xac_nhan_gia_von"));
+    const hasRecentContribution = linked.some((contract) => field(contract, "nam") === "2026");
+    const hasFrequency = linked.length > 0;
+    const hasRecency = linked.some((contract) => field(contract, "ngay_ky"));
+    const hasPayment = linked.length > 0 && linked.every((contract) => field(contract, "ngay_den_han") && field(contract, "ngay_thanh_toan") && field(contract, "thanh_toan"));
+    const availableWeight = (hasRevenue && hasCost ? 25 : 0) + (hasRecentContribution ? 5 : 0) + (hasStartDate ? 8 : 0) + (hasFrequency ? 9 : 0) + (hasRecency ? 8 : 0) + (hasPayment ? 15 : 0);
+    const evidence = history.count === 0 ? "NEEDS_CONTRACT_EVIDENCE" : history.incompleteCost > 0 ? "REVIEW_COST_EVIDENCE" : "CONTRACT_HISTORY_PRESENT";
+    return { customer_id: id, customer_name: field(row, "ten_cong_ty"), revenue: String(history.revenue), gross_profit: String(history.profit), outstanding: String(history.outstanding), weighted_pipeline: "", contract_count: String(history.count), orphan_contract_count: String(orphanContracts), evidence_status: evidence, priority_reason: evidence === "NEEDS_CONTRACT_EVIDENCE" ? "Chưa có hợp đồng liên kết; cần bổ sung bằng chứng trước khi xếp tiềm năng." : "Có lịch sử hợp đồng đã liên kết; ưu tiên kiểm tra CSKH theo dữ liệu hợp đồng.", score_coverage_pct: String(availableWeight), score_status: "NOT_READY" };
+  });
   const triage = customer360.map((row) => ({
     customer_id: row.customer_id,
     total_score: row.contract_count,
     segment: row.evidence_status,
     official_score: "",
     score_status: "NOT_READY",
-    coverage_pct: "",
+    coverage_pct: row.score_coverage_pct,
     priority_reason: row.priority_reason,
     cskh_action: row.evidence_status === "NEEDS_CONTRACT_EVIDENCE" ? "Thu thập bằng chứng hợp đồng trước khi xếp hạng" : row.evidence_status === "REVIEW_COST_EVIDENCE" ? "Xác nhận giá vốn/công nợ trước khi đánh giá lợi nhuận" : "Phân công CSKH rà soát nhu cầu và khả năng tái ký",
   }));

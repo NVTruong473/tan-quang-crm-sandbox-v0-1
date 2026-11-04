@@ -55,16 +55,42 @@ async function xlsx(bytes: Uint8Array): Promise<Map<string, Array<Record<string,
   const shared = [...(entries.get("xl/sharedStrings.xml") ?? "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map((m) => xmlDecode([...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((x) => x[1]).join("")));
   const output = new Map<string, Array<Record<string, string>>>();
   for (const sheet of workbook.matchAll(/<sheet\b[^>]*name="([^"]+)"[^>]*r:id="([^"]+)"[^>]*\/?/g)) { const target = relationship.get(sheet[2]); const path = target ? `xl/${target.replace(/^\/?(?:xl\/)?/, "")}` : ""; const xml = entries.get(path); if (!xml) continue; const matrix: string[][] = [];
-    for (const r of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) { const cells: string[] = []; for (const c of r[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) { if (/<f[\s>]/.test(c[2])) throw new Error("XLSX_FORMULA_FORBIDDEN"); const ref = /\br="([A-Z]+)\d+"/i.exec(c[1])?.[1] ?? "A"; let col = 0; for (const char of ref.toUpperCase()) col = col * 26 + char.charCodeAt(0) - 64; const type = /\bt="([^"]+)"/.exec(c[1])?.[1]; const value = /<v>([\s\S]*?)<\/v>/.exec(c[2])?.[1] ?? (/<t[^>]*>([\s\S]*?)<\/t>/.exec(c[2])?.[1] ?? ""); cells[col - 1] = type === "s" ? (shared[Number(value)] ?? "") : xmlDecode(value); } matrix.push(cells); }
+    for (const r of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) { const cells: string[] = []; for (const c of r[1].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) { const ref = /\br="([A-Z]+)\d+"/i.exec(c[1])?.[1] ?? "A"; let col = 0; for (const char of ref.toUpperCase()) col = col * 26 + char.charCodeAt(0) - 64; const type = /\bt="([^"]+)"/.exec(c[1])?.[1]; const formula = /<f[\s>]/.test(c[2]); const value = formula ? "" : (/\<v\>([\s\S]*?)<\/v>/.exec(c[2])?.[1] ?? (/<t[^>]*>([\s\S]*?)<\/t>/.exec(c[2])?.[1] ?? "")); cells[col - 1] = type === "s" ? (shared[Number(value)] ?? "") : xmlDecode(value); } matrix.push(cells); }
     const headers = (matrix.shift() ?? []).map(canonical); output.set(sheet[1], matrix.filter((r) => r.some((v) => String(v ?? "").trim())).map((r) => Object.fromEntries(headers.map((h, i) => [h, String(r[i] ?? "").trim()]))));
   } return output;
 }
 
 function tableKey(name: string, rows: Array<Record<string, string>>) { const n = normal(name.replace(/\.[^.]+$/, "")); return Object.keys(REQUIRED).find((k) => SOURCE_NAMES[k].map(normal).includes(n)) ?? Object.keys(REQUIRED).find((k) => REQUIRED[k].every((field) => field in (rows[0] ?? {}))) ?? null; }
 function finite(row: Record<string, string>, field: string, table: string, index: number) { if (!Number.isFinite(Number(row[field]))) throw new Error(`${table}:ROW_${index + 2}_${field.toUpperCase()}_INVALID`); }
+function field(row: Record<string, string>, ...aliases: string[]) { return Object.entries(row).find(([key]) => aliases.some((alias) => normal(key) === normal(alias) || normal(key).startsWith(normal(alias))))?.[1]?.trim() ?? ""; }
+function numberOrZero(value: string) { const number = Number(value); return Number.isFinite(number) ? number : 0; }
+function customerContractProfile(sources: Map<string, Array<Record<string, string>>>): Materialization | null {
+  const customerSheet = [...sources.entries()].find(([name]) => normal(name).startsWith("01_khach_hang"));
+  const contractSheet = [...sources.entries()].find(([name]) => normal(name).startsWith("02_hop_dong"));
+  if (!customerSheet || !contractSheet) return null;
+  const customers = customerSheet[1].filter((row) => field(row, "ma_kh") && field(row, "ten_cong_ty"));
+  if (!customers.length) throw new Error("CUSTOMER_CONTRACT_PROFILE_CUSTOMERS_REQUIRED");
+  const ids = new Set<string>();
+  for (const customer of customers) { const id = field(customer, "ma_kh"); if (ids.has(id)) throw new Error("CUSTOMER_CONTRACT_PROFILE_DUPLICATE_CUSTOMER_ID"); ids.add(id); }
+  const byCustomer = new Map<string, { count: number; revenue: number; profit: number; outstanding: number; incompleteCost: number }>();
+  let orphanContracts = 0; let validContracts = 0;
+  for (const row of contractSheet[1]) {
+    const contractId = field(row, "ma_hd"); if (!contractId) continue;
+    const customerId = field(row, "ma_kh"); if (!customerId || !ids.has(customerId)) { orphanContracts += 1; continue; }
+    const status = field(row, "tinh_trang"); if (normal(status) === "huy") continue;
+    const current = byCustomer.get(customerId) ?? { count: 0, revenue: 0, profit: 0, outstanding: 0, incompleteCost: 0 };
+    current.count += 1; current.revenue += numberOrZero(field(row, "doanh_thu_ghi_nhan")); current.outstanding += numberOrZero(field(row, "cong_no"));
+    if (normal(field(row, "xac_nhan_gia_von")) === "da_xac_nhan") current.profit += numberOrZero(field(row, "doanh_thu_ghi_nhan")) - numberOrZero(field(row, "gia_von")); else current.incompleteCost += 1;
+    byCustomer.set(customerId, current); validContracts += 1;
+  }
+  const customer360 = customers.map((row) => { const id = field(row, "ma_kh"), history = byCustomer.get(id) ?? { count: 0, revenue: 0, profit: 0, outstanding: 0, incompleteCost: 0 }; const evidence = history.count === 0 ? "NEEDS_CONTRACT_EVIDENCE" : history.incompleteCost > 0 ? "REVIEW_COST_EVIDENCE" : "CONTRACT_HISTORY_PRESENT"; return { customer_id: id, customer_name: field(row, "ten_cong_ty"), revenue: String(history.revenue), gross_profit: String(history.profit), outstanding: String(history.outstanding), weighted_pipeline: "", contract_count: String(history.count), evidence_status: evidence, priority_reason: evidence === "NEEDS_CONTRACT_EVIDENCE" ? "Chưa có hợp đồng liên kết; cần bổ sung bằng chứng trước khi xếp tiềm năng." : "Có lịch sử hợp đồng đã liên kết; ưu tiên kiểm tra CSKH theo dữ liệu hợp đồng." }; });
+  const triage = customer360.map((row) => ({ customer_id: row.customer_id, total_score: row.contract_count, segment: row.evidence_status, priority_reason: row.priority_reason }));
+  return { tables: { customer_360: customer360, scoring_sandbox: triage, opportunities: [], crm_activities: [] }, record_counts: { customer_360: customer360.length, scoring_sandbox: triage.length, opportunities: 0, crm_activities: 0 }, report: { validator_version: "CUSTOMER_CONTRACT_WORKBOOK_ADAPTER_V1", contract_version: "TAN_QUANG_CUSTOMER_CONTRACT_V1", source_profile: "CUSTOMER_CONTRACT", customers: customer360.length, linked_contracts: validContracts, quarantined_orphan_contracts: orphanContracts, unavailable_domains: ["sales_pipeline", "crm_activities", "approved_potential_score"], result: "VALIDATED_WITH_LIMITATIONS" } };
+}
 export async function validateAndMaterialize(files: InputFile[]): Promise<Materialization> {
   if (!files.length || files.length > 4) throw new Error("FILE_COUNT_INVALID"); const total = files.reduce((n, file) => n + file.bytes.byteLength, 0); if (total > MAX_SOURCE_BYTES) throw new Error("SOURCE_SIZE_EXCEEDS_8MB_VALIDATION_LIMIT"); const workbook = files.filter((f) => /\.xlsx$/i.test(f.name)); if (workbook.length > 1 || (workbook.length && files.length !== 1) || files.some((f) => !/\.(xlsx|csv)$/i.test(f.name))) throw new Error("INPUT_COMBINATION_INVALID");
   const sources = new Map<string, Array<Record<string, string>>>(); if (workbook.length) for (const [name, rows] of await xlsx(workbook[0].bytes)) sources.set(name, rows); else for (const file of files) sources.set(file.name, csv(text(file.bytes)));
+  const profile = workbook.length ? customerContractProfile(sources) : null; if (profile) return profile;
   const tables: Record<string, Array<Record<string, string>>> = {}; for (const [name, rows] of sources) { const key = tableKey(name, rows); if (!key || tables[key]) throw new Error(`TABLE_NOT_RECOGNIZED_OR_DUPLICATE:${name}`); tables[key] = rows; }
   for (const [key, fields] of Object.entries(REQUIRED)) { const rows = tables[key]; if (!rows?.length) throw new Error(`TABLE_REQUIRED:${key}`); const missing = fields.filter((field) => !(field in rows[0])); if (missing.length) throw new Error(`HEADER_REQUIRED:${key}:${missing.join(",")}`); }
   const records = Object.values(tables).reduce((n, rows) => n + rows.length, 0); if (records > MAX_ROWS) throw new Error("ROW_LIMIT_EXCEEDED"); const ids = new Set<string>();
